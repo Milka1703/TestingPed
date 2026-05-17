@@ -8,6 +8,11 @@
   --ok: #29c56a;
   --warn: #f0b429;
   --bad: #f45d5d;
+  --neutral: #9aa8c8;
+  --beginner: #7a879f;
+  --intern: #7ec0ff;
+  --intern-border: #3d6eb8;
+  --intern-bg: rgba(94, 161, 255, 0.16);
   --border: #2a396b;
 }
 
@@ -185,6 +190,99 @@ th { color: #c8d7ff; font-weight: 600; }
   border: 1px solid var(--border);
   border-radius: 8px;
   background: rgba(8, 15, 33, 0.45);
+  transition: color 0.2s, border-color 0.2s, background 0.2s;
+}
+
+.timer-urgent {
+  color: var(--bad);
+  border-color: var(--bad);
+  background: rgba(244, 93, 93, 0.12);
+}
+
+.timer-warning {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--warn);
+  background: rgba(240, 180, 41, 0.12);
+  color: #ffe6a8;
+  font-size: 0.92rem;
+}
+
+.quiz-progress {
+  margin: 0 0 12px;
+  font-weight: 600;
+  color: #d5e1ff;
+}
+
+.test-choice-title {
+  margin: 0 0 16px;
+  text-align: center;
+}
+
+.test-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+
+.test-choice-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px;
+  background: rgba(8, 15, 33, 0.45);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.test-choice-card h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.test-choice-meta {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+}
+
+.btn-primary {
+  background: rgba(94, 161, 255, 0.28);
+  margin-top: auto;
+}
+
+.quiz-nav,
+.quiz-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.tab-guard-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(5, 8, 18, 0.88);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.tab-guard-panel {
+  max-width: 420px;
+  border: 1px solid var(--bad);
+  border-radius: 12px;
+  padding: 20px;
+  background: var(--panel);
+  text-align: center;
+}
+
+.tab-guard-panel h3 {
+  margin: 0 0 8px;
+  color: var(--bad);
 }
 
 .options {
@@ -277,6 +375,202 @@ th { color: #c8d7ff; font-weight: 600; }
   min-height: 92px;
 }
 .hidden { display: none; }
+
+.result-panel {
+  border-color: var(--accent);
+}
+
+.result-summary {
+  margin: 12px 0;
+  padding: 14px;
+  border-radius: 10px;
+  background: rgba(8, 15, 33, 0.55);
+  border: 1px solid var(--border);
+}
+
+.result-score-line {
+  margin-bottom: 8px;
+}
+
+.result-score-value {
+  font-size: 2.4rem;
+  font-weight: 800;
+  line-height: 1.1;
+  color: #e8edff;
+}
+
+.result-meta {
+  margin: 0 0 12px;
+  color: var(--muted);
+}
+
+.competency-badge {
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin: 10px 0;
+  border: 1px solid var(--border);
+}
+
+.competency-badge b {
+  display: block;
+  font-size: 1.1rem;
+  margin-bottom: 6px;
+}
+
+.competency-desc {
+  margin: 0;
+  color: var(--text);
+}
+
+.competency-range {
+  margin: 8px 0 0;
+}
+
+.level-intern {
+  border-color: var(--intern-border);
+  background: var(--intern-bg);
+}
+
+.result-summary.level-intern .result-score-value,
+.result-summary.level-intern .competency-badge b {
+  color: var(--intern);
+}
+
+.level-middle {
+  border-color: var(--warn);
+  background: rgba(240, 180, 41, 0.1);
+}
+
+.result-summary.level-middle .result-score-value,
+.result-summary.level-middle .competency-badge b {
+  color: var(--warn);
+}
+
+.level-architect {
+  border-color: var(--ok);
+  background: rgba(41, 197, 106, 0.1);
+}
+
+.result-summary.level-architect .result-score-value,
+.result-summary.level-architect .competency-badge b {
+  color: var(--ok);
+}
+
+.result-categories {
+  margin-top: 8px;
+}
+
+.result-categories .cat-name {
+  color: #d5e1ff;
+}
+
+.competency-levels-list {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.competency-level-card {
+  border-radius: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+}
+
+.competency-level-card h3 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+}
+
+.competency-level-card p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.competency-level-range {
+  display: inline-block;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  margin-bottom: 10px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(8, 15, 33, 0.5);
+}
+
+.competency-level-card.level-beginner {
+  border-color: #556075;
+  background: rgba(122, 135, 159, 0.14);
+}
+
+.competency-level-card.level-beginner .competency-level-range,
+.competency-level-card.level-beginner h3 {
+  color: var(--beginner);
+}
+
+.competency-level-card.level-beginner .competency-level-range {
+  border-color: #556075;
+  background: rgba(122, 135, 159, 0.12);
+}
+
+.result-summary.level-beginner .result-score-value,
+.result-summary.level-beginner .competency-badge b {
+  color: var(--beginner);
+}
+
+.level-beginner {
+  border-color: #556075;
+  background: rgba(122, 135, 159, 0.14);
+}
+
+.competency-level-card.level-intern {
+  border-color: var(--intern-border);
+  background: var(--intern-bg);
+}
+
+.competency-level-card.level-intern .competency-level-range,
+.competency-level-card.level-intern h3 {
+  color: var(--intern);
+}
+
+.competency-level-card.level-intern .competency-level-range {
+  border-color: var(--intern-border);
+  background: var(--intern-bg);
+}
+
+.competency-level-card.level-middle {
+  border-color: var(--warn);
+  background: rgba(240, 180, 41, 0.1);
+}
+
+.competency-level-card.level-middle .competency-level-range,
+.competency-level-card.level-middle h3 {
+  color: var(--warn);
+}
+
+.competency-level-card.level-architect {
+  border-color: var(--ok);
+  background: rgba(41, 197, 106, 0.1);
+}
+
+.competency-level-card.level-architect .competency-level-range,
+.competency-level-card.level-architect h3 {
+  color: var(--ok);
+}
+
+@media (max-width: 1100px) {
+  .competency-levels-list {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .competency-levels-list {
+    grid-template-columns: 1fr;
+  }
+}
 .export-panel {
   margin-top: 10px;
   display: flex;
@@ -306,4 +600,5 @@ select {
   .kpi, .third, .half { grid-column: span 12; }
   nav { width: 100%; }
   nav a { margin: 0 6px 6px 0; display: inline-block; }
+  .test-choice-grid { grid-template-columns: 1fr; }
 }

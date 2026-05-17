@@ -3,26 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>IT Teacher Readiness - Пилот</title>
+  <title>IT competence testing</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header>
     <div class="container topline">
       <div>
-        <h1>Пилотная система входного тестирования преподавателей IT</h1>
-        <p class="subtitle">Колледж IT · диагностика предметной и методической готовности</p>
+        <h1>Система тестирования на ИТ-компетентность</h1>
+        <p class="subtitle">Колледж IT.Москва</p>
       </div>
-      <nav>
-        <a href="#spec">Спецификация</a>
-        <a href="#questions">Примеры вопросов</a>
-        <a href="#pilot-test">Пробный тест</a>
-        <a href="#reports">Отчеты</a>
-        <a href="#metrics">Метрики</a>
-      </nav>
     </div>
   </header>
-
   <main class="container">
     <section id="spec" class="grid">
       <article class="card kpi">
@@ -32,223 +24,90 @@
       </article>
       <article class="card kpi">
         <h3>Время</h3>
-        <div class="score">45 мин</div>
-        <div class="muted">пилотный модуль</div>
+        <div class="score">25 минут и <br>15 минут</div>
+        <div class="muted">формат: 30 и 20 вопросов</div>
       </article>
-      <article class="card kpi">
-        <h3>Проходной порог</h3>
-        <div class="score">75%</div>
-        <div class="muted">настраиваемый</div>
-      </article>
-      <article class="card kpi">
-        <h3>Категория готовности</h3>
-        <div class="score ok">85%+</div>
-        <div class="muted">готов к преподаванию</div>
-      </article>
-
       <article class="card half">
         <h2>Цели тестирования</h2>
         <ul>
-          <li>Диагностика зон роста, а не отсев кандидатов.</li>
-          <li>Выявление дефицитов до старта занятий и снижение рисков выгорания.</li>
+          <li>Диагностика зон роста</li>
+          <li>Выявление дефицитов и снижение рисков выгорания.</li>
           <li>Построение индивидуальной траектории адаптации и методической поддержки.</li>
-          <li>Единый стандарт качества преподавания в онбординге.</li>
         </ul>
         <span class="pill">Прозрачность</span>
         <span class="pill">Объективность</span>
-        <span class="pill">Инклюзивность</span>
-        <span class="pill">Развитие, не отсев</span>
+        <span class="pill">Развитие</span>
       </article>
 
-      <article class="card half">
-        <h2>Трехмерная модель оценки</h2>
-        <table>
-          <thead>
-            <tr><th>Измерение</th><th>Что проверяем</th><th>Как проверяем</th></tr>
-          </thead>
-          <tbody>
-            <tr><td>Hard Skills</td><td>Алгоритмы, сети, БД, основы CI/CD, облака</td><td>Анализ кода, прикладные MCQ, архитектурные мини-кейсы</td></tr>
-            <tr><td>Педагогические компетенции</td><td>Объяснение сложного, обратная связь, работа с типичными ошибками</td><td>Сценарные задачи и rubric-based проверка</td></tr>
-            <tr><td>Контекстуальные/мета-навыки</td><td>Гибридное обучение, цифровая этика, работа с AI, взаимодействие с методистами</td><td>Кейсы на принятие решений и оценку качества AI-материалов</td></tr>
-          </tbody>
-        </table>
-      </article>
-
-      <article class="card wide">
-        <h2>Формат, валидность и справедливость</h2>
-        <ul>
-          <li>В пилоте: объективные MCQ и прикладные кейсы; в боевой версии: плюс открытые ответы по рубрикам.</li>
-          <li>Сложность: 60% базовый, 30% прикладной, 10% аналитический.</li>
-          <li>Модульность: общий базовый блок + профильные модули (веб/данные/mobile и т.д.).</li>
-          <li>Платформа для пилота: LMS (Moodle/Canvas) или Google Forms + скрипты логирования.</li>
-          <li>Обязательные функции: таймер, автосохранение, рандомизация вопросов/вариантов.</li>
-          <li>Анти-списывание без паранойи: ограничение времени, фиксация смен ответов и времени на вопрос.</li>
-          <li>Приоритет валидности: минимум trivia-вопросов, максимум задач на применение и объяснение.</li>
-        </ul>
-      </article>
     </section>
-
-    <section id="questions" class="grid" style="margin-top: 14px;">
-      <article class="card wide">
-        <h2>Примеры вопросов (ориентир на применение)</h2>
-        <div class="question">
-          <b>[Hard Skills | Код и объяснение]</b><br>
-          Предскажите результат фрагмента кода, найдите ошибку и предложите, как объяснить ее студенту в 2 шага.
-        </div>
-        <div class="question">
-          <b>[Педагогика | Сценарий]</b><br>
-          Как объясните инкапсуляцию новичку за 3 предложения и какую типичную ошибку предупредите заранее?
-        </div>
-        <div class="question">
-          <b>[Контекстуальные навыки | AI]</b><br>
-          Вы получили AI-генерацию задания. Какие 2 критерия проверки качества примените перед выдачей группе?
-        </div>
-        <div class="question">
-          <b>[Hard Skills | Надежность]</b><br>
-          В веб-проекте конкатенируют SQL-строки. Какое решение снижает риск уязвимостей и почему?
-        </div>
-        <div class="question">
-          <b>[Процесс]</b><br>
-          Результат теста используется для плана 30-60-90 и обсуждается с методистом, а не как бинарный фильтр.
-        </div>
-      </article>
-    </section>
-
-    <section id="reports" class="grid" style="margin-top: 14px;">
-      <article class="card half">
-        <h2>Шаблон отчета кандидата</h2>
-        <ul>
-          <li>Итог: <b>__%</b> · Категория: <b>готов / условно готов / подготовка</b></li>
-          <li>Карта компетенций по 3 измерениям + детализация по блокам.</li>
-          <li>План развития 30-60-90 дней с контрольными точками.</li>
-          <li>Рекомендованные ресурсы: темы, практикумы, мини-курс.</li>
-        </ul>
-      </article>
-
-      <article class="card half">
-        <h2>Шаблон отчета HR/методиста</h2>
-        <ul>
-          <li>Сводка: дата, итог, риск-профиль, готовность к нагрузке.</li>
-          <li>Топ-3 дефицита и ожидаемые риски в аудитории.</li>
-          <li>Решение: допуск / допуск с наставником / план дообучения.</li>
-          <li>План 30/60 дней с ответственными и датой ретеста.</li>
-        </ul>
-      </article>
-    </section>
-
     <section id="pilot-test" class="grid" style="margin-top: 14px;">
       <article class="card wide">
-        <div class="quiz-head">
-          <h2 id="pilot-title">Пробный тест</h2>
-          <div class="timer" id="timer">Осталось: 20:00</div>
+        <div id="test-selection-screen">
+          <h2 class="test-choice-title">Выберите тип тестирования</h2>
+          <div class="test-choice-grid">
+            <article class="test-choice-card">
+              <h3>Для действующих преподавателей</h3>
+              <ul class="test-choice-meta">
+                <li>30 вопросов</li>
+                <li>25 минут</li>
+              </ul>
+              <button type="button" class="btn btn-primary" data-test-type="teacher_test">Начать тест</button>
+            </article>
+            <article class="test-choice-card">
+              <h3>Для кандидатов на собеседование</h3>
+              <ul class="test-choice-meta">
+                <li>20 вопросов</li>
+                <li>15 минут</li>
+              </ul>
+              <button type="button" class="btn btn-primary" data-test-type="candidate_test">Начать тест</button>
+            </article>
+          </div>
         </div>
-        <p class="muted" id="pilot-desc">
-          Формат пилота: 1 правильный ответ в каждом вопросе. После завершения вы получите карту компетенций и рекомендации.
+        <div id="quiz-screen" class="hidden">
+          <div class="quiz-head">
+            <h2 id="pilot-title">Тестирование на ИТ-компетентность</h2>
+            <div class="timer" id="timer">25:00</div>
+          </div>
+          <p id="timer-warning" class="timer-warning hidden" role="alert">Осталось менее 3 минут. Завершите ответы и отправьте тест.</p>
+          <p id="quiz-progress" class="quiz-progress">Вопрос 1 из 30</p>
+          <div id="tab-guard-overlay" class="tab-guard-overlay hidden" role="alertdialog" aria-modal="true">
+            <div class="tab-guard-panel">
+              <h3>Тест на паузе</h3>
+              <p>Вернитесь на вкладку теста. Переключение вкладок запрещено до завершения.</p>
+            </div>
+          </div>
+          <div id="quiz-container"></div>
+          <div class="quiz-nav">
+            <button type="button" class="btn" id="prev-btn" disabled>Назад</button>
+            <button type="button" class="btn" id="next-btn">Далее</button>
+            <button type="button" class="btn hidden" id="submit-btn">Завершить и проверить</button>
+          </div>
+          <div id="quiz-result" class="question hidden" style="margin-top: 12px;"></div>
+          <div class="quiz-actions hidden" id="quiz-actions-done">
+            <button type="button" class="btn btn-primary" id="restart-btn">Пройти ещё раз</button>
+            <button type="button" class="btn" id="back-to-select-btn">Выбрать другой тест</button>
+          </div>
+          <div class="export-panel hidden" id="export-panel">
+            <button type="button" class="btn btn-primary" id="export-csv-btn">Скачать результат</button>
+            <button type="button" class="btn" id="export-json-btn">Экспорт JSON</button>
+          </div>
+          <p class="mini hidden" id="log-note">Лог времени по каждому вопросу включен в экспорт.</p>
+        </div>
+      </article>
+    </section>
+    <section id="competency-levels" class="grid" style="margin-top: 14px;">
+      <article class="card wide">
+        <h2>Уровни компетенции</h2>
+        <p class="muted mini" style="margin-bottom: 12px;">
+          Единые процентные критерии для теста действующих преподавателей и кандидатов на собеседование.
         </p>
-        <div class="question" style="margin-bottom: 12px;">
-          <b>Параметры сессии</b><br>
-          <p class="mini" style="margin-top: 8px;">Все вопросы выводятся единым списком без деления по категориям.</p>
-        </div>
-        <div id="quiz-container"></div>
-        <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px;">
-          <button class="btn" id="start-btn">Начать тест</button>
-          <button class="btn" id="submit-btn" disabled>Завершить и проверить</button>
-          <button class="btn hidden" id="restart-btn">Пройти заново</button>
-        </div>
-        <div class="export-panel hidden" id="export-panel">
-          <button class="btn" id="export-json-btn">Экспорт JSON</button>
-          <button class="btn" id="export-csv-btn">Экспорт CSV</button>
-        </div>
-        <p class="mini hidden" id="log-note">Лог времени по каждому вопросу включен в экспорт.</p>
-        <div id="quiz-result" class="question hidden" style="margin-top: 12px;"></div>
+        <div id="competency-levels-list" class="competency-levels-list" aria-label="Уровни и диапазоны баллов"></div>
       </article>
     </section>
-
-    <section class="grid" style="margin-top: 14px;">
-      <article class="card half">
-        <h2>Рубрика для открытых ответов</h2>
-        <table>
-          <thead>
-            <tr><th>Критерий</th><th>Шкала</th><th>Пояснение</th></tr>
-          </thead>
-          <tbody>
-            <tr><td>Точность</td><td>0-2</td><td>Фактическая корректность и отсутствие ошибок по теме.</td></tr>
-            <tr><td>Доступность объяснения</td><td>0-2</td><td>Понятность языка для уровня целевой группы.</td></tr>
-            <tr><td>Методическая грамотность</td><td>0-1</td><td>Есть шаги объяснения, примеры, диагностика типичных ошибок.</td></tr>
-          </tbody>
-        </table>
-      </article>
-      <article class="card half">
-        <h2>Классификация сложности 60/30/10</h2>
-        <ul>
-          <li><b>Базовый</b>: проверяет определение, базовый принцип, стандартный сценарий.</li>
-          <li><b>Прикладной</b>: требует выбрать решение в типовой рабочей ситуации.</li>
-          <li><b>Аналитический</b>: требует обоснования выбора и оценки альтернатив/рисков.</li>
-        </ul>
-      </article>
-    </section>
-
-    <section class="grid" style="margin-top: 14px;">
-      <article class="card wide">
-        <h2>Доступность и инклюзивность</h2>
-        <ul>
-          <li>Поддержка скринридеров: семантическая структура, корректные подписи элементов формы.</li>
-          <li>Управление размером шрифта: кнопки A-/A+ для удобства чтения.</li>
-          <li>Нейтральные формулировки без культурных и языковых барьеров.</li>
-        </ul>
-        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-          <button class="btn" id="font-dec-btn">A-</button>
-          <button class="btn" id="font-inc-btn">A+</button>
-        </div>
-      </article>
-    </section>
-
-    <section id="metrics" class="grid" style="margin-top: 14px;">
-      <article class="card third">
-        <h3>Предиктивная валидность</h3>
-        <p class="muted">Цель: корреляция теста и качества преподавания через 3-6 мес. (r >= 0.5).</p>
-      </article>
-      <article class="card third">
-        <h3>Успешный онбординг</h3>
-        <p class="muted">Цель: >= 75% преподавателей успешно проходят испытательный срок.</p>
-      </article>
-      <article class="card third">
-        <h3>NPS кандидатов</h3>
-        <p class="muted">Цель: >= 40 по восприятию теста как полезного и справедливого.</p>
-      </article>
-      <article class="card third">
-        <h3>Time-to-Readiness</h3>
-        <p class="muted">Цель: сокращение времени выхода на полную нагрузку на 20-30%.</p>
-      </article>
-      <article class="card third">
-        <h3>Актуализация контента</h3>
-        <p class="muted">Цель: цикл обновления банка вопросов не реже, чем раз в 6 месяцев.</p>
-      </article>
-      <article class="card third">
-        <h3>Чек-лист качества</h3>
-        <p class="muted">Понимание > память, есть блок объяснения, есть связь с 30-60-90 планом.</p>
-      </article>
-    </section>
-
-    <section class="grid" style="margin-top: 14px;">
-      <article class="card wide">
-        <h2>Быстрый чек-лист системы</h2>
-        <ul>
-          <li>Вопросы проверяют применение и объяснение, а не запоминание дат/флагов.</li>
-          <li>Есть отдельные задания на разбор ошибок студентов и качественную обратную связь.</li>
-          <li>Результат теста всегда ведет к плану развития 30-60-90, а не к бинарному вердикту.</li>
-          <li>Контент обновляется по циклу до 6 месяцев с учетом AI, облаков и ИБ-рисков.</li>
-          <li>Есть проверка валидности: высокий балл должен коррелировать с качеством преподавания.</li>
-        </ul>
-      </article>
-    </section>
-
-    <p class="footer">
-      Пилотная страница: демонстрационный прототип структуры и контента.
-      Следующий шаг — подключить реальный банк вопросов и выгрузку результатов из LMS.
-    </p>
   </main>
   <script src="questions.js"></script>
+  <script src="test-generator.js"></script>
+  <script src="scoring.js"></script>
   <script src="script.js"></script>
 </body>
 </html>

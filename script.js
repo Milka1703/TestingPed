@@ -1,29 +1,45 @@
 (function () {
   const baseQuestions = Array.isArray(window.PILOT_QUESTIONS) ? window.PILOT_QUESTIONS : [];
+  const AUTOSAVE_PREFIX = "it_competence_test_v2";
 
-  const startBtn = document.getElementById("start-btn");
-  const submitBtn = document.getElementById("submit-btn");
-  const restartBtn = document.getElementById("restart-btn");
-  const exportJsonBtn = document.getElementById("export-json-btn");
-  const exportCsvBtn = document.getElementById("export-csv-btn");
-  const exportPanel = document.getElementById("export-panel");
-  const logNote = document.getElementById("log-note");
+  const selectionScreen = document.getElementById("test-selection-screen");
+  const quizScreen = document.getElementById("quiz-screen");
   const quizContainer = document.getElementById("quiz-container");
   const resultBox = document.getElementById("quiz-result");
   const timerEl = document.getElementById("timer");
+  const timerWarning = document.getElementById("timer-warning");
+  const quizProgress = document.getElementById("quiz-progress");
+  const tabGuardOverlay = document.getElementById("tab-guard-overlay");
+  const pilotTitle = document.getElementById("pilot-title");
+  const prevBtn = document.getElementById("prev-btn");
+  const nextBtn = document.getElementById("next-btn");
+  const submitBtn = document.getElementById("submit-btn");
+  const restartBtn = document.getElementById("restart-btn");
+  const backToSelectBtn = document.getElementById("back-to-select-btn");
+  const quizActionsDone = document.getElementById("quiz-actions-done");
+  const exportPanel = document.getElementById("export-panel");
+  const exportJsonBtn = document.getElementById("export-json-btn");
+  const exportCsvBtn = document.getElementById("export-csv-btn");
+  const logNote = document.getElementById("log-note");
   const fontIncBtn = document.getElementById("font-inc-btn");
   const fontDecBtn = document.getElementById("font-dec-btn");
-  const pilotTitle = document.getElementById("pilot-title");
-  const pilotDesc = document.getElementById("pilot-desc");
-  const limitSec = 45 * 60;
-  const autosaveKey = "it_teacher_pilot_autosave_v1";
+  const navLinks = document.querySelectorAll("header nav a");
 
+  let testType = null;
+  let testConfig = null;
   let questions = [];
-  let leftSec = limitSec;
+  let currentIndex = 0;
+  let leftSec = 0;
   let timerId = null;
   let started = false;
+  let finished = false;
   let sessionStartMs = 0;
   let resultPayload = null;
+  let timerWarningShown = false;
+
+  function getAutosaveKey() {
+    return AUTOSAVE_PREFIX + "_" + (testType || "none");
+  }
 
   function formatTime(totalSec) {
     const m = String(Math.floor(totalSec / 60)).padStart(2, "0");
@@ -49,33 +65,76 @@
       .replace(/\s+/g, " ");
   }
 
-  function buildShuffledQuestions() {
-    const shuffledQuestions = baseQuestions.map((q, idx) => {
+  function showScreen(screen) {
+    if (selectionScreen) selectionScreen.classList.toggle("hidden", screen !== "selection");
+    if (quizScreen) quizScreen.classList.toggle("hidden", screen !== "quiz");
+  }
+
+  function setNavLocked(locked) {
+    navLinks.forEach(function (link) {
+      if (locked) {
+        link.setAttribute("data-locked", "1");
+        link.style.pointerEvents = "none";
+        link.style.opacity = "0.45";
+      } else {
+        link.removeAttribute("data-locked");
+        link.style.pointerEvents = "";
+        link.style.opacity = "";
+      }
+    });
+  }
+
+  function updateTimerDisplay() {
+    if (!timerEl) return;
+    timerEl.textContent = formatTime(Math.max(leftSec, 0));
+    timerEl.classList.toggle("timer-urgent", started && !finished && leftSec > 0 && leftSec <= 180);
+    if (started && !finished && leftSec <= 180 && leftSec > 0 && !timerWarningShown) {
+      timerWarningShown = true;
+      if (timerWarning) timerWarning.classList.remove("hidden");
+    }
+  }
+
+  function updateProgress() {
+    if (!quizProgress || !questions.length) return;
+    quizProgress.textContent = "Вопрос " + (currentIndex + 1) + " из " + questions.length;
+  }
+
+  function updateNavButtons() {
+    if (prevBtn) prevBtn.disabled = currentIndex <= 0;
+    if (nextBtn) nextBtn.classList.toggle("hidden", currentIndex >= questions.length - 1);
+    if (submitBtn) submitBtn.classList.toggle("hidden", currentIndex < questions.length - 1);
+  }
+
+  function buildShuffledQuestions(sourceQuestions) {
+    return sourceQuestions.map(function (q, idx) {
       if (q.kind === "sequence" && Array.isArray(q.sequence) && q.sequence.length) {
         return {
           id: "Q" + (idx + 1),
           dimension: q.dimension || "Hard Skills",
           level: q.level || "basic",
           module: q.module || "core",
-          kind: q.kind || "single",
+          kind: q.kind,
           match: Array.isArray(q.match) ? q.match : null,
           media: Array.isArray(q.media) ? q.media : null,
           acceptedAnswers: Array.isArray(q.acceptedAnswers) ? q.acceptedAnswers : null,
           sequence: q.sequence.slice(),
+          category: q.category || null,
           block: q.block,
           text: q.text,
           options: Array.isArray(q.options) && q.options.length ? q.options.slice() : q.sequence.slice(),
-          answer: -1
+          answer: -1,
+          savedAnswer: null
         };
       }
       const answerIndexes = Array.isArray(q.answer) ? q.answer : [q.answer];
-      const optionObjects = q.options.map((option, optionIdx) => ({ option, isAnswer: answerIndexes.includes(optionIdx) }));
+      const sourceOptions = Array.isArray(q.options) ? q.options : [];
+      const optionObjects = sourceOptions.map(function (option, optionIdx) {
+        return { option: option, isAnswer: answerIndexes.includes(optionIdx) };
+      });
       const mixedOptions = shuffle(optionObjects);
       const mixedAnswer = q.kind === "multi"
-        ? mixedOptions
-          .map((o, mixedIdx) => (o.isAnswer ? mixedIdx : -1))
-          .filter((idx2) => idx2 >= 0)
-        : mixedOptions.findIndex((o) => o.isAnswer);
+        ? mixedOptions.map(function (o, mixedIdx) { return o.isAnswer ? mixedIdx : -1; }).filter(function (i) { return i >= 0; })
+        : mixedOptions.findIndex(function (o) { return o.isAnswer; });
       return {
         id: "Q" + (idx + 1),
         dimension: q.dimension || "Hard Skills",
@@ -86,248 +145,506 @@
         media: Array.isArray(q.media) ? q.media : null,
         acceptedAnswers: Array.isArray(q.acceptedAnswers) ? q.acceptedAnswers : null,
         sequence: Array.isArray(q.sequence) ? q.sequence.slice() : null,
+        category: q.category || null,
         block: q.block,
         text: q.text,
-        options: mixedOptions.map((o) => o.option),
-        answer: mixedAnswer
+        options: mixedOptions.map(function (o) { return o.option; }),
+        answer: mixedAnswer,
+        savedAnswer: null
       };
     });
-    return shuffledQuestions;
   }
 
-  function renderQuestions() {
-    quizContainer.innerHTML = questions.map((q, idx) => {
-      const mediaHtml = Array.isArray(q.media) && q.media.length
-        ? (
-          '<div class="question-media-grid">' +
-            q.media.map((m) => (
-              '<figure class="question-media-item">' +
-                '<figcaption>' + (m.label || "") + "</figcaption>" +
-                '<img src="' + m.src + '" alt="' + (m.alt || "") + '">' +
-              "</figure>"
-            )).join("") +
-          "</div>"
-        )
-        : "";
-      let optionsHtml = "";
-      if (q.kind === "matching" && Array.isArray(q.match) && q.match.length) {
-        const rightItems = shuffle(q.match.map((pair) => pair.right));
-        optionsHtml = q.match.map((pair, pairIdx) => {
-          const selectOptions = ['<option value="">Выберите соответствие</option>']
-            .concat(rightItems.map((item) => '<option value="' + item + '">' + item + "</option>"))
-            .join("");
-          return (
-            '<div class="matching-row">' +
-              '<div class="matching-left">' + pair.left + "</div>" +
-              '<div class="matching-arrow">→</div>' +
-              '<select class="matching-select" data-match="1" data-question-index="' + idx + '" data-pair-index="' + pairIdx + '">' +
-                selectOptions +
-              "</select>" +
-            "</div>"
-          );
-        }).join("");
-      } else if (q.kind === "open") {
-        optionsHtml =
-          '<label class="open-answer-label">' +
-            '<span class="mini">Введите развернутый ответ:</span>' +
-            '<textarea class="open-answer-input" data-open="1" data-question-index="' + idx + '" rows="4" placeholder="Введите ваш ответ..."></textarea>' +
-          "</label>";
-      } else if (q.kind === "fill_blank") {
-        optionsHtml =
-          '<label class="open-answer-label">' +
-            '<span class="mini">Впишите термин:</span>' +
-            '<input class="fill-blank-input" data-fill="1" data-question-index="' + idx + '" type="text" placeholder="Введите ответ">' +
-          "</label>";
-      } else if (q.kind === "sequence" && Array.isArray(q.sequence) && q.sequence.length) {
-        const source = Array.isArray(q.options) && q.options.length ? q.options.slice() : q.sequence.slice();
-        const pool = shuffle(source);
-        optionsHtml = q.sequence.map(function (_, seqIdx) {
-          const selectOptions = ['<option value="">Выберите элемент</option>']
-            .concat(pool.map((item) => '<option value="' + item + '">' + item + "</option>"))
-            .join("");
-          return (
-            '<div class="matching-row">' +
-              '<div class="matching-left">Позиция ' + (seqIdx + 1) + "</div>" +
-              '<div class="matching-arrow">→</div>' +
-              '<select class="matching-select" data-sequence="1" data-question-index="' + idx + '" data-seq-index="' + seqIdx + '">' +
-                selectOptions +
-              "</select>" +
-            "</div>"
-          );
-        }).join("");
-      } else if (q.kind === "multi") {
-        optionsHtml = q.options.map((option, optionIdx) => (
-          '<label class="option-label">' +
-            '<input type="checkbox" name="q-' + idx + '" value="' + optionIdx + '">' +
-            "<span>" + option + "</span>" +
-          "</label>"
-        )).join("");
+  function collectAnswer(idx) {
+    const q = questions[idx];
+    if (!q) return;
+    if (q.kind === "matching" && Array.isArray(q.match)) {
+      q.savedAnswer = q.match.map(function (_, pairIdx) {
+        const select = document.querySelector('select[data-match="1"][data-question-index="' + idx + '"][data-pair-index="' + pairIdx + '"]');
+        return select ? String(select.value || "") : "";
+      });
+    } else if (q.kind === "sequence" && Array.isArray(q.sequence)) {
+      q.savedAnswer = q.sequence.map(function (_, seqIdx) {
+        const select = document.querySelector('select[data-sequence="1"][data-question-index="' + idx + '"][data-seq-index="' + seqIdx + '"]');
+        return select ? String(select.value || "") : "";
+      });
+    } else if (q.kind === "open") {
+      const picked = document.querySelector('input[type="radio"][name="q-' + idx + '"]:checked');
+      if (picked) {
+        q.savedAnswer = Number(picked.value);
       } else {
-        optionsHtml = q.options.map((option, optionIdx) => (
-          '<label class="option-label">' +
-            '<input type="radio" name="q-' + idx + '" value="' + optionIdx + '">' +
-            "<span>" + option + "</span>" +
-          "</label>"
-        )).join("");
+        const textarea = document.querySelector('textarea[data-open="1"][data-question-index="' + idx + '"]');
+        q.savedAnswer = textarea ? String(textarea.value || "") : "";
       }
-      return (
-        '<div class="question" data-question-index="' + idx + '">' +
-          (q.kind === "matching" ? '<span class="pill kind-pill">Сопоставление</span><br>' : "") +
-          (q.kind === "open" ? '<span class="pill kind-pill">Открытый ответ</span><br>' : "") +
-          (q.kind === "fill_blank" ? '<span class="pill kind-pill">Заполнить поле</span><br>' : "") +
-          (q.kind === "sequence" && Array.isArray(q.sequence) && q.sequence.length ? '<span class="pill kind-pill">Последовательность</span><br>' : "") +
-          (q.kind === "multi" ? '<span class="pill kind-pill">Множественный выбор</span><br>' : "") +
-          "<b>" + (idx + 1) + ".</b><br>" +
-          "<span>" + q.text + "</span>" +
-          mediaHtml +
-          '<div class="options">' + optionsHtml + "</div>" +
-        "</div>"
-      );
-    }).join("");
+    } else if (q.kind === "fill_blank") {
+      const input = document.querySelector('input[data-fill="1"][data-question-index="' + idx + '"]');
+      q.savedAnswer = input ? String(input.value || "") : "";
+    } else if (q.kind === "multi") {
+      const picked = Array.from(document.querySelectorAll('input[name="q-' + idx + '"]:checked'))
+        .map(function (input) { return Number(input.value); })
+        .filter(function (v) { return !Number.isNaN(v); })
+        .sort(function (a, b) { return a - b; });
+      q.savedAnswer = picked;
+    } else {
+      const picked = document.querySelector('input[type="radio"][name="q-' + idx + '"]:checked');
+      q.savedAnswer = picked ? Number(picked.value) : -1;
+    }
+    const now = Date.now();
+    if (q.savedAnswer !== null && q.savedAnswer !== undefined && q.savedAnswer !== "" && !(Array.isArray(q.savedAnswer) && !q.savedAnswer.length) && q.savedAnswer !== -1) {
+      q.lastChangedAtMs = now;
+    }
+  }
 
+  function applySavedAnswer(idx) {
+    const q = questions[idx];
+    if (!q || q.savedAnswer === null || q.savedAnswer === undefined) return;
+    if (q.kind === "matching" && Array.isArray(q.savedAnswer)) {
+      q.savedAnswer.forEach(function (val, pairIdx) {
+        const select = document.querySelector('select[data-match="1"][data-question-index="' + idx + '"][data-pair-index="' + pairIdx + '"]');
+        if (select) select.value = val;
+      });
+    } else if (q.kind === "sequence" && Array.isArray(q.savedAnswer)) {
+      q.savedAnswer.forEach(function (val, seqIdx) {
+        const select = document.querySelector('select[data-sequence="1"][data-question-index="' + idx + '"][data-seq-index="' + seqIdx + '"]');
+        if (select) select.value = val;
+      });
+    } else if (q.kind === "open") {
+      if (typeof q.savedAnswer === "number" && q.savedAnswer >= 0) {
+        const radio = document.querySelector('input[name="q-' + idx + '"][value="' + q.savedAnswer + '"]');
+        if (radio) radio.checked = true;
+      } else if (typeof q.savedAnswer === "string") {
+        const textarea = document.querySelector('textarea[data-open="1"][data-question-index="' + idx + '"]');
+        if (textarea) textarea.value = q.savedAnswer;
+      }
+    } else if (q.kind === "fill_blank" && typeof q.savedAnswer === "string") {
+      const input = document.querySelector('input[data-fill="1"][data-question-index="' + idx + '"]');
+      if (input) input.value = q.savedAnswer;
+    } else if (q.kind === "multi" && Array.isArray(q.savedAnswer)) {
+      q.savedAnswer.forEach(function (val) {
+        const checkbox = document.querySelector('input[type="checkbox"][name="q-' + idx + '"][value="' + val + '"]');
+        if (checkbox) checkbox.checked = true;
+      });
+    } else if (typeof q.savedAnswer === "number" && q.savedAnswer >= 0) {
+      const radio = document.querySelector('input[name="q-' + idx + '"][value="' + q.savedAnswer + '"]');
+      if (radio) radio.checked = true;
+    }
+  }
+
+  function renderQuestionHtml(q, idx) {
+    const d = "div";
+    const mediaHtml = Array.isArray(q.media) && q.media.length
+      ? "<" + d + ' class="question-media-grid">' + q.media.map(function (m) {
+        return '<figure class="question-media-item"><figcaption>' + (m.label || "") + '</figcaption><img src="' + m.src + '" alt="' + (m.alt || "") + '"></figure>';
+      }).join("") + "</" + d + ">"
+      : "";
+    let optionsHtml = "";
+    if (q.kind === "matching" && Array.isArray(q.match) && q.match.length) {
+      const rightItems = shuffle(q.match.map(function (pair) { return pair.right; }));
+      optionsHtml = q.match.map(function (pair, pairIdx) {
+        const selectOptions = ['<option value="">Выберите соответствие</option>']
+          .concat(rightItems.map(function (item) { return '<option value="' + item + '">' + item + "</option>"; }))
+          .join("");
+        return '<div class="matching-row"><div class="matching-left">' + pair.left + '</div><div class="matching-arrow">→</div><select class="matching-select" data-match="1" data-question-index="' + idx + '" data-pair-index="' + pairIdx + '">' + selectOptions + "</select></div>";
+      }).join("");
+    } else if (q.kind === "open" && Array.isArray(q.options) && q.options.length) {
+      optionsHtml = q.options.map(function (option, optionIdx) {
+        return '<label class="option-label"><input type="radio" name="q-' + idx + '" value="' + optionIdx + '"><span>' + option + "</span></label>";
+      }).join("");
+    } else if (q.kind === "open") {
+      optionsHtml = '<label class="open-answer-label"><span class="mini">Введите развернутый ответ:</span><textarea class="open-answer-input" data-open="1" data-question-index="' + idx + '" rows="4" placeholder="Введите ваш ответ..."></textarea></label>';
+    } else if (q.kind === "fill_blank") {
+      optionsHtml = '<label class="open-answer-label"><span class="mini">Впишите термин:</span><input class="fill-blank-input" data-fill="1" data-question-index="' + idx + '" type="text" placeholder="Введите ответ"></label>';
+    } else if (q.kind === "sequence" && Array.isArray(q.sequence) && q.sequence.length) {
+      const source = Array.isArray(q.options) && q.options.length ? q.options.slice() : q.sequence.slice();
+      const pool = shuffle(source);
+      optionsHtml = q.sequence.map(function (_, seqIdx) {
+        const selectOptions = ['<option value="">Выберите элемент</option>']
+          .concat(pool.map(function (item) { return '<option value="' + item + '">' + item + "</option>"; }))
+          .join("");
+        return '<div class="matching-row"><div class="matching-left">Позиция ' + (seqIdx + 1) + '</div><div class="matching-arrow">→</div><select class="matching-select" data-sequence="1" data-question-index="' + idx + '" data-seq-index="' + seqIdx + '">' + selectOptions + "</select></div>";
+      }).join("");
+    } else if (q.kind === "multi") {
+      optionsHtml = q.options.map(function (option, optionIdx) {
+        return '<label class="option-label"><input type="checkbox" name="q-' + idx + '" value="' + optionIdx + '"><span>' + option + "</span></label>";
+      }).join("");
+    } else {
+      optionsHtml = q.options.map(function (option, optionIdx) {
+        return '<label class="option-label"><input type="radio" name="q-' + idx + '" value="' + optionIdx + '"><span>' + option + "</span></label>";
+      }).join("");
+    }
+    const kindPills = [
+      q.kind === "matching" ? '<span class="pill kind-pill">Сопоставление</span>' : "",
+      q.kind === "open" ? '<span class="pill kind-pill">Открытый ответ</span>' : "",
+      q.kind === "fill_blank" ? '<span class="pill kind-pill">Заполнить поле</span>' : "",
+      q.kind === "sequence" ? '<span class="pill kind-pill">Последовательность</span>' : "",
+      q.kind === "multi" ? '<span class="pill kind-pill">Множественный выбор</span>' : ""
+    ].filter(Boolean).join("<br>");
+    const categoryLine = q.category ? '<span class="pill">' + q.category + "</span><br>" : "";
+    return (
+      "<" + d + ' class="question" data-question-index="' + idx + '">' +
+      categoryLine + kindPills + (kindPills ? "<br>" : "") +
+      "<b>" + q.text + "</b>" + mediaHtml +
+      "<" + d + ' class="options">' + optionsHtml + "</" + d + "></" + d + ">"
+    );
+  }
+
+  function bindQuestionControls(idx) {
     const controls = quizContainer.querySelectorAll("input[type='radio'], input[type='checkbox'], select[data-match='1'], select[data-sequence='1'], textarea[data-open='1'], input[data-fill='1']");
-    controls.forEach((control) => {
-      const eventName = control.tagName === "TEXTAREA" || targetIsTextInput(control) ? "input" : "change";
-      control.addEventListener(eventName, function (event) {
-        const target = event.target;
-        let idx = -1;
-        if (target.getAttribute("data-match") === "1") {
-          idx = Number(target.getAttribute("data-question-index"));
-        } else if (target.getAttribute("data-sequence") === "1") {
-          idx = Number(target.getAttribute("data-question-index"));
-        } else if (target.getAttribute("data-open") === "1" || target.getAttribute("data-fill") === "1") {
-          idx = Number(target.getAttribute("data-question-index"));
-        } else {
-          const name = target.name || "";
-          idx = Number(name.replace("q-", ""));
-        }
-        if (Number.isNaN(idx)) return;
-        const now = Date.now();
-        questions[idx].lastChangedAtMs = now;
-        questions[idx].changeCount += 1;
+    controls.forEach(function (control) {
+      const eventName = control.tagName === "TEXTAREA" || (control.tagName === "INPUT" && control.getAttribute("data-fill") === "1") ? "input" : "change";
+      control.addEventListener(eventName, function () {
+        collectAnswer(idx);
+        const q = questions[idx];
+        if (q) q.changeCount = (q.changeCount || 0) + 1;
         saveProgress();
       });
     });
   }
 
-  function targetIsTextInput(control) {
-    return control.tagName === "INPUT" && (control.getAttribute("data-fill") === "1");
+  function renderCurrentQuestion() {
+    const q = questions[currentIndex];
+    if (!q || !quizContainer) return;
+    quizContainer.innerHTML = renderQuestionHtml(q, currentIndex);
+    applySavedAnswer(currentIndex);
+    bindQuestionControls(currentIndex);
+    updateProgress();
+    updateNavButtons();
   }
 
   function saveProgress() {
-    if (!started) return;
-    const selectedAnswers = questions.map((q, idx) => {
-      if (q.kind === "matching" && Array.isArray(q.match)) {
-        return q.match.map(function (_, pairIdx) {
-          const select = document.querySelector('select[data-match="1"][data-question-index="' + idx + '"][data-pair-index="' + pairIdx + '"]');
-          return select ? String(select.value || "") : "";
-        });
-      }
-      if (q.kind === "sequence" && Array.isArray(q.sequence)) {
-        return q.sequence.map(function (_, seqIdx) {
-          const select = document.querySelector('select[data-sequence="1"][data-question-index="' + idx + '"][data-seq-index="' + seqIdx + '"]');
-          return select ? String(select.value || "") : "";
-        });
-      }
-      if (q.kind === "open") {
-        const textarea = document.querySelector('textarea[data-open="1"][data-question-index="' + idx + '"]');
-        return textarea ? String(textarea.value || "") : "";
-      }
-      if (q.kind === "fill_blank") {
-        const input = document.querySelector('input[data-fill="1"][data-question-index="' + idx + '"]');
-        return input ? String(input.value || "") : "";
-      }
-      if (q.kind === "multi") {
-        const picked = Array.from(document.querySelectorAll('input[name="q-' + idx + '"]:checked'));
-        return picked.map((input) => Number(input.value)).filter((value) => !Number.isNaN(value)).sort((a, b) => a - b);
-      }
-      const picked = document.querySelector('input[type="radio"][name="q-' + idx + '"]:checked');
-      return picked ? Number(picked.value) : -1;
-    });
-    const payload = {
+    if (!started || finished || !testType) return;
+    collectAnswer(currentIndex);
+    localStorage.setItem(getAutosaveKey(), JSON.stringify({
+      testType: testType,
       leftSec: leftSec,
+      currentIndex: currentIndex,
       sessionStartMs: sessionStartMs,
-      selectedAnswers: selectedAnswers,
+      timerWarningShown: timerWarningShown,
       questions: questions
+    }));
+  }
+
+  function enableTabGuard() {
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("blur", onWindowBlur);
+    window.addEventListener("beforeunload", onBeforeUnload);
+  }
+
+  function disableTabGuard() {
+    document.removeEventListener("visibilitychange", onVisibilityChange);
+    window.removeEventListener("blur", onWindowBlur);
+    window.removeEventListener("beforeunload", onBeforeUnload);
+    if (tabGuardOverlay) tabGuardOverlay.classList.add("hidden");
+  }
+
+  function onVisibilityChange() {
+    if (!started || finished) return;
+    if (document.hidden && tabGuardOverlay) tabGuardOverlay.classList.remove("hidden");
+    else if (tabGuardOverlay) tabGuardOverlay.classList.add("hidden");
+  }
+
+  function onWindowBlur() {
+    if (!started || finished) return;
+    if (tabGuardOverlay) tabGuardOverlay.classList.remove("hidden");
+  }
+
+  function onBeforeUnload(event) {
+    if (!started || finished) return;
+    event.preventDefault();
+    event.returnValue = "";
+  }
+
+  function startTimer() {
+    clearInterval(timerId);
+    updateTimerDisplay();
+    timerId = setInterval(function () {
+      leftSec -= 1;
+      updateTimerDisplay();
+      saveProgress();
+      if (leftSec <= 0) finishQuiz(true);
+    }, 1000);
+  }
+
+  function pickSessionQuestions(typeId) {
+    if (typeof window.selectPilotTest !== "function") {
+      throw new Error("test-generator.js не подключён");
+    }
+    return window.selectPilotTest(typeId, baseQuestions);
+  }
+
+  function startTest(typeId) {
+    if (!baseQuestions.length) {
+      alert("Банк вопросов не загружен.");
+      return;
+    }
+    const config = window.TEST_CONFIGS && window.TEST_CONFIGS[typeId];
+    if (!config) {
+      alert("Неизвестный тип теста.");
+      return;
+    }
+    let sessionSource;
+    try {
+      sessionSource = pickSessionQuestions(typeId);
+    } catch (err) {
+      alert(err.message || "Не удалось сформировать тест");
+      return;
+    }
+    if (sessionSource.length !== config.totalQuestions) {
+      alert("Ожидалось " + config.totalQuestions + " вопросов, получено: " + sessionSource.length);
+      return;
+    }
+
+    testType = typeId;
+    testConfig = config;
+    finished = false;
+    timerWarningShown = false;
+    currentIndex = 0;
+    sessionStartMs = Date.now();
+    leftSec = config.timeLimitSec;
+
+    questions = buildShuffledQuestions(sessionSource).map(function (q) {
+      q.renderedAtMs = Date.now();
+      q.lastChangedAtMs = null;
+      q.changeCount = 0;
+      return q;
+    });
+
+    if (pilotTitle) pilotTitle.textContent = config.title;
+    if (timerWarning) timerWarning.classList.add("hidden");
+    if (resultBox) {
+      resultBox.className = "question hidden";
+      resultBox.innerHTML = "";
+    }
+    if (quizActionsDone) quizActionsDone.classList.add("hidden");
+    if (exportPanel) exportPanel.classList.add("hidden");
+    if (logNote) logNote.classList.add("hidden");
+
+    showScreen("quiz");
+    setNavLocked(true);
+    started = true;
+    renderCurrentQuestion();
+    startTimer();
+    enableTabGuard();
+    saveProgress();
+  }
+
+  function gradeAnswer(q) {
+    let isCorrect = false;
+    let selectedOptionText = "";
+    let correctOptionText = "";
+    const saved = q.savedAnswer;
+
+    if (q.kind === "matching" && Array.isArray(q.match)) {
+      const selectedPairs = Array.isArray(saved) ? saved : [];
+      const allFilled = selectedPairs.length === q.match.length && selectedPairs.every(function (val) { return String(val || "").length > 0; });
+      isCorrect = allFilled && selectedPairs.every(function (val, pairIdx) { return val === q.match[pairIdx].right; });
+      selectedOptionText = selectedPairs.map(function (val, pairIdx) { return q.match[pairIdx].left + " -> " + (val || "—"); }).join(" | ");
+      correctOptionText = q.match.map(function (pair) { return pair.left + " -> " + pair.right; }).join(" | ");
+    } else if (q.kind === "sequence" && Array.isArray(q.sequence)) {
+      const selectedSequence = Array.isArray(saved) ? saved : [];
+      const allFilled = selectedSequence.length === q.sequence.length && selectedSequence.every(function (val) { return String(val || "").length > 0; });
+      isCorrect = allFilled && selectedSequence.every(function (val, seqIdx) { return val === q.sequence[seqIdx]; });
+      selectedOptionText = selectedSequence.map(function (val, seqIdx) { return (seqIdx + 1) + ") " + (val || "—"); }).join(" | ");
+      correctOptionText = q.sequence.map(function (item, seqIdx) { return (seqIdx + 1) + ") " + item; }).join(" | ");
+    } else if (q.kind === "fill_blank") {
+      const userValue = typeof saved === "string" ? saved : "";
+      selectedOptionText = userValue;
+      const accepted = Array.isArray(q.acceptedAnswers) && q.acceptedAnswers.length
+        ? q.acceptedAnswers
+        : (q.answer >= 0 && q.options[q.answer] ? [q.options[q.answer]] : []);
+      isCorrect = accepted.map(normalizeText).includes(normalizeText(userValue));
+      correctOptionText = accepted.join(" / ");
+    } else if (q.kind === "open") {
+      if (typeof saved === "number" && saved >= 0) {
+        isCorrect = saved === q.answer;
+        selectedOptionText = q.options[saved] || "";
+        correctOptionText = q.answer >= 0 ? q.options[q.answer] : "";
+      } else if (Array.isArray(q.options) && q.options.length && q.answer >= 0) {
+        const userValue = typeof saved === "string" ? saved : "";
+        selectedOptionText = userValue;
+        correctOptionText = q.options[q.answer] || "";
+        isCorrect = normalizeText(userValue) === normalizeText(correctOptionText);
+      } else {
+        selectedOptionText = typeof saved === "string" ? saved : "";
+        correctOptionText = "—";
+        isCorrect = false;
+      }
+    } else if (q.kind === "multi") {
+      const checked = Array.isArray(saved) ? saved.slice().sort(function (a, b) { return a - b; }) : [];
+      const correctIndexes = Array.isArray(q.answer) ? q.answer.slice().sort(function (a, b) { return a - b; }) : [];
+      isCorrect = checked.length === correctIndexes.length && checked.every(function (v, i) { return v === correctIndexes[i]; });
+      selectedOptionText = checked.length ? checked.map(function (v) { return q.options[v]; }).join(" | ") : "";
+      correctOptionText = correctIndexes.length ? correctIndexes.map(function (v) { return q.options[v]; }).join(" | ") : "";
+    } else {
+      const picked = typeof saved === "number" ? saved : -1;
+      isCorrect = picked >= 0 && picked === q.answer;
+      selectedOptionText = picked >= 0 ? q.options[picked] : "";
+      correctOptionText = q.answer >= 0 ? q.options[q.answer] : "";
+    }
+
+    return { isCorrect: isCorrect, selectedOptionText: selectedOptionText, correctOptionText: correctOptionText };
+  }
+
+  function renderResultHtml(score) {
+    const level = score.competency;
+    const categoryDetails = (window.PILOT_TEST_CATEGORIES || Object.keys(score.byCategory)).map(function (cat) {
+      const row = score.byCategory[cat] || { ok: 0, total: 0 };
+      if (!row.total) return "";
+      const p = Math.round((row.ok / row.total) * 100);
+      return "<li><span class=\"cat-name\">" + cat + "</span>: " + row.ok + "/" + row.total + " (" + p + "%)</li>";
+    }).filter(Boolean).join("");
+
+    return (
+      '<div class="result-summary ' + level.cls + '">' +
+      '<div class="result-score-line"><span class="result-score-value">' + score.scorePercent + '%</span></div>' +
+      '<p class="result-meta">Правильных ответов: <b>' + score.correct + "</b> из <b>" + score.total + "</b></p>" +
+      '<div class="competency-badge ' + level.cls + '">' +
+      "<b>" + level.label + "</b>" +
+      '<p class="competency-desc">' + level.description + "</p>" +
+      "</div>" +
+      "</div>" +
+      "<b>Разбивка по категориям:</b><ul class=\"result-categories\">" + categoryDetails + "</ul>"
+    );
+  }
+
+  function collectAllAnswers() {
+    const prev = currentIndex;
+    for (let i = 0; i < questions.length; i += 1) {
+      currentIndex = i;
+      if (i === prev && quizContainer && quizContainer.innerHTML) {
+        collectAnswer(i);
+      } else if (questions[i].savedAnswer !== null && questions[i].savedAnswer !== undefined) {
+        continue;
+      }
+    }
+    currentIndex = prev;
+  }
+
+  function finishQuiz(auto) {
+    if (!started || finished) return;
+    collectAnswer(currentIndex);
+    collectAllAnswers();
+    clearInterval(timerId);
+    started = false;
+    finished = true;
+    disableTabGuard();
+    setNavLocked(false);
+
+    const score = typeof window.calculateTestScore === "function"
+      ? window.calculateTestScore(questions, function (q) { return gradeAnswer(q); })
+      : (function () {
+        const g = questions.map(function (q) { return gradeAnswer(q); });
+        const correct = g.filter(function (x) { return x.isCorrect; }).length;
+        const total = questions.length;
+        const scorePercent = total > 0 ? Math.round((correct / total) * 100) : 0;
+        return {
+          correct: correct,
+          total: total,
+          scorePercent: scorePercent,
+          competency: window.getCompetencyLevel ? window.getCompetencyLevel(scorePercent) : { label: "", description: "", cls: "" },
+          byCategory: {},
+          questions: g
+        };
+      })();
+
+    const completedAtMs = Date.now();
+    resultPayload = {
+      testType: testType,
+      testTitle: testConfig ? testConfig.title : testType,
+      sessionStartMs: sessionStartMs,
+      startedAt: new Date(sessionStartMs).toISOString(),
+      completedAtMs: completedAtMs,
+      completedAt: new Date(completedAtMs).toISOString(),
+      autoCompleted: auto,
+      totalQuestions: score.total,
+      correctAnswers: score.correct,
+      scorePercent: score.scorePercent,
+      competencyId: score.competency.id,
+      competencyLabel: score.competency.label,
+      competencyDescription: score.competency.description,
+      competencyClass: score.competency.cls,
+      byCategory: score.byCategory,
+      questions: score.questions
     };
-    localStorage.setItem(autosaveKey, JSON.stringify(payload));
+    localStorage.removeItem(getAutosaveKey());
+
+    if (quizContainer) quizContainer.innerHTML = "";
+    if (prevBtn) prevBtn.disabled = true;
+    if (nextBtn) nextBtn.classList.add("hidden");
+    if (submitBtn) submitBtn.classList.add("hidden");
+
+    if (resultBox) {
+      resultBox.className = "question result-panel";
+      resultBox.innerHTML =
+        "<b>" + (testConfig ? testConfig.title : "Результат") + "</b><br>" +
+        (auto ? "<small>Тест завершён автоматически по таймеру.</small><br>" : "") +
+        renderResultHtml(score);
+    }
+    if (quizActionsDone) quizActionsDone.classList.remove("hidden");
+    if (exportPanel) exportPanel.classList.remove("hidden");
+    if (logNote) logNote.classList.remove("hidden");
+    if (timerEl) timerEl.classList.remove("timer-urgent");
+  }
+
+  function resetToSelection() {
+    clearInterval(timerId);
+    if (testType) localStorage.removeItem(getAutosaveKey());
+    started = false;
+    finished = false;
+    testType = null;
+    testConfig = null;
+    questions = [];
+    currentIndex = 0;
+    timerWarningShown = false;
+    disableTabGuard();
+    setNavLocked(false);
+    if (quizContainer) quizContainer.innerHTML = "";
+    if (resultBox) {
+      resultBox.className = "question hidden";
+      resultBox.innerHTML = "";
+    }
+    if (quizActionsDone) quizActionsDone.classList.add("hidden");
+    if (exportPanel) exportPanel.classList.add("hidden");
+    if (logNote) logNote.classList.add("hidden");
+    if (timerWarning) timerWarning.classList.add("hidden");
+    if (timerEl) {
+      timerEl.textContent = "25:00";
+      timerEl.classList.remove("timer-urgent");
+    }
+    showScreen("selection");
   }
 
   function restoreProgress() {
-    const raw = localStorage.getItem(autosaveKey);
-    if (!raw) return false;
-    try {
-      const saved = JSON.parse(raw);
-      if (!saved || !Array.isArray(saved.questions) || !saved.questions.length) return false;
-      questions = saved.questions;
-      leftSec = typeof saved.leftSec === "number" ? saved.leftSec : limitSec;
-      sessionStartMs = typeof saved.sessionStartMs === "number" ? saved.sessionStartMs : Date.now();
-      renderQuestions();
-      if (Array.isArray(saved.selectedAnswers)) {
-        saved.selectedAnswers.forEach((val, idx) => {
-          const question = questions[idx];
-          if (!question) return;
-          if (question.kind === "matching" && Array.isArray(question.match) && Array.isArray(val)) {
-            val.forEach(function (pickedValue, pairIdx) {
-              const select = document.querySelector('select[data-match="1"][data-question-index="' + idx + '"][data-pair-index="' + pairIdx + '"]');
-              if (select && typeof pickedValue === "string") select.value = pickedValue;
-            });
-            return;
-          }
-          if (question.kind === "sequence" && Array.isArray(question.sequence) && Array.isArray(val)) {
-            val.forEach(function (pickedValue, seqIdx) {
-              const select = document.querySelector('select[data-sequence="1"][data-question-index="' + idx + '"][data-seq-index="' + seqIdx + '"]');
-              if (select && typeof pickedValue === "string") select.value = pickedValue;
-            });
-            return;
-          }
-          if (question.kind === "open" && typeof val === "string") {
-            const textarea = document.querySelector('textarea[data-open="1"][data-question-index="' + idx + '"]');
-            if (textarea) textarea.value = val;
-            return;
-          }
-          if (question.kind === "fill_blank" && typeof val === "string") {
-            const input = document.querySelector('input[data-fill="1"][data-question-index="' + idx + '"]');
-            if (input) input.value = val;
-            return;
-          }
-          if (question.kind === "multi" && Array.isArray(val)) {
-            val.forEach((pickedValue) => {
-              const checkbox = document.querySelector('input[type="checkbox"][name="q-' + idx + '"][value="' + pickedValue + '"]');
-              if (checkbox) checkbox.checked = true;
-            });
-            return;
-          }
-          if (typeof val === "number" && val >= 0) {
-            const radio = document.querySelector('input[name="q-' + idx + '"][value="' + val + '"]');
-            if (radio) radio.checked = true;
-          }
-        });
+    const types = ["teacher_test", "candidate_test"];
+    for (let i = 0; i < types.length; i += 1) {
+      const key = AUTOSAVE_PREFIX + "_" + types[i];
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      try {
+        const saved = JSON.parse(raw);
+        if (!saved || !Array.isArray(saved.questions) || !saved.questions.length) continue;
+        testType = saved.testType || types[i];
+        testConfig = window.TEST_CONFIGS[testType];
+        questions = saved.questions;
+        currentIndex = typeof saved.currentIndex === "number" ? saved.currentIndex : 0;
+        leftSec = typeof saved.leftSec === "number" ? saved.leftSec : (testConfig ? testConfig.timeLimitSec : 1500);
+        sessionStartMs = typeof saved.sessionStartMs === "number" ? saved.sessionStartMs : Date.now();
+        timerWarningShown = !!saved.timerWarningShown;
+        started = true;
+        finished = false;
+        if (pilotTitle && testConfig) pilotTitle.textContent = testConfig.title;
+        if (timerWarning) timerWarning.classList.toggle("hidden", !timerWarningShown);
+        showScreen("quiz");
+        setNavLocked(true);
+        renderCurrentQuestion();
+        startTimer();
+        enableTabGuard();
+        return true;
+      } catch (e) {
+        localStorage.removeItem(key);
       }
-      started = true;
-      startBtn.disabled = true;
-      submitBtn.disabled = false;
-      restartBtn.classList.add("hidden");
-      exportPanel.classList.add("hidden");
-      logNote.classList.add("hidden");
-      timerEl.textContent = "Осталось: " + formatTime(leftSec);
-      timerId = setInterval(() => {
-        leftSec -= 1;
-        timerEl.textContent = "Осталось: " + formatTime(Math.max(leftSec, 0));
-        saveProgress();
-        if (leftSec <= 0) finishQuiz(true);
-      }, 1000);
-      return true;
-    } catch (e) {
-      localStorage.removeItem(autosaveKey);
-      return false;
     }
-  }
-
-  function getCategory(percent) {
-    if (percent >= 85) return { label: "Готов к преподаванию", cls: "ok", tip: "Можно планировать стандартный онбординг и точечный методический коучинг." };
-    if (percent >= 75) return { label: "Условно готов, требуется наставничество", cls: "warn", tip: "Рекомендуется наставник на 6-8 недель и адресная проработка слабых блоков." };
-    return { label: "Требуется дополнительная подготовка", cls: "bad", tip: "Нужен индивидуальный план подготовки и повторное тестирование до самостоятельных занятий." };
+    return false;
   }
 
   function downloadFile(filename, content, mimeType) {
@@ -342,292 +659,65 @@
     URL.revokeObjectURL(url);
   }
 
-  function toCsvRows(payload) {
-    const rows = [
-      ["session_id", payload.sessionId],
-      ["completed_at", payload.completedAt],
-      ["total_questions", String(payload.totalQuestions)],
-      ["correct_answers", String(payload.correctAnswers)],
-      ["score_percent", String(payload.scorePercent)],
-      ["category", payload.category],
-      ["spent_seconds_total", String(payload.spentSecondsTotal)],
-      []
-    ];
-    rows.push(["question_id", "dimension", "level", "module", "block", "question", "selected_option", "correct_option", "is_correct", "time_to_answer_sec", "answer_change_count"]);
-    payload.questions.forEach((q) => {
-      rows.push([
-        q.id,
-        q.dimension,
-        q.level,
-        q.module,
-        q.block,
-        q.text,
-        q.selectedOptionText,
-        q.correctOptionText,
-        String(q.isCorrect),
-        String(q.timeToAnswerSec),
-        String(q.answerChangeCount)
-      ]);
+  document.querySelectorAll("[data-test-type]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      if (started) return;
+      startTest(btn.getAttribute("data-test-type"));
     });
-    return rows.map((row) => row.map((cell) => '"' + String(cell).replace(/"/g, '""') + '"').join(",")).join("\n");
-  }
+  });
 
-  function finishQuiz(auto) {
-    if (!started) return;
-    clearInterval(timerId);
-    started = false;
-
-    let correct = 0;
-    let autoGradableTotal = 0;
-    let manualQuestionsCount = 0;
-    const byBlock = {};
-    const byDimension = {};
-    questions.forEach((q) => {
-      byBlock[q.block] = byBlock[q.block] || { ok: 0, total: 0, manual: 0 };
-      byDimension[q.dimension] = byDimension[q.dimension] || { ok: 0, total: 0, manual: 0 };
-      if (q.kind === "open") {
-        byBlock[q.block].manual += 1;
-        byDimension[q.dimension].manual += 1;
-        manualQuestionsCount += 1;
-      } else {
-        byBlock[q.block].total += 1;
-        byDimension[q.dimension].total += 1;
-        autoGradableTotal += 1;
-      }
-    });
-
-    const questionLogs = questions.map((q, idx) => {
-      let selectedOptionIndex = -1;
-      let selectedOptionText = "";
-      let correctOptionText = q.options[q.answer];
-      let isCorrect = false;
-      let requiresManualReview = false;
-
-      if (q.kind === "matching" && Array.isArray(q.match)) {
-        const selectedPairs = q.match.map(function (_, pairIdx) {
-          const select = document.querySelector('select[data-match="1"][data-question-index="' + idx + '"][data-pair-index="' + pairIdx + '"]');
-          return select ? String(select.value || "") : "";
-        });
-        isCorrect = selectedPairs.every(function (val, pairIdx) { return val === q.match[pairIdx].right; });
-        selectedOptionText = selectedPairs.map(function (val, pairIdx) {
-          return q.match[pairIdx].left + " -> " + (val || "—");
-        }).join(" | ");
-        correctOptionText = q.match.map(function (pair) {
-          return pair.left + " -> " + pair.right;
-        }).join(" | ");
-      } else if (q.kind === "sequence" && Array.isArray(q.sequence)) {
-        const selectedSequence = q.sequence.map(function (_, seqIdx) {
-          const select = document.querySelector('select[data-sequence="1"][data-question-index="' + idx + '"][data-seq-index="' + seqIdx + '"]');
-          return select ? String(select.value || "") : "";
-        });
-        isCorrect = selectedSequence.every(function (val, seqIdx) { return val === q.sequence[seqIdx]; });
-        selectedOptionText = selectedSequence.map(function (val, seqIdx) {
-          return (seqIdx + 1) + ") " + (val || "—");
-        }).join(" | ");
-        correctOptionText = q.sequence.map(function (item, seqIdx) {
-          return (seqIdx + 1) + ") " + item;
-        }).join(" | ");
-      } else if (q.kind === "fill_blank") {
-        const input = document.querySelector('input[data-fill="1"][data-question-index="' + idx + '"]');
-        const userValue = input ? String(input.value || "") : "";
-        selectedOptionText = userValue;
-        const normalizedUserValue = normalizeText(userValue);
-        const accepted = Array.isArray(q.acceptedAnswers) ? q.acceptedAnswers : [];
-        isCorrect = accepted.map(normalizeText).includes(normalizedUserValue);
-        correctOptionText = accepted.join(" / ");
-      } else if (q.kind === "open") {
-        const textarea = document.querySelector('textarea[data-open="1"][data-question-index="' + idx + '"]');
-        selectedOptionText = textarea ? String(textarea.value || "") : "";
-        correctOptionText = "Ручная проверка";
-        requiresManualReview = true;
-      } else if (q.kind === "multi") {
-        const checked = Array.from(document.querySelectorAll('input[type="checkbox"][name="q-' + idx + '"]:checked'))
-          .map((input) => Number(input.value))
-          .filter((value) => !Number.isNaN(value))
-          .sort((a, b) => a - b);
-        const correctIndexes = Array.isArray(q.answer) ? q.answer.slice().sort((a, b) => a - b) : [];
-        const sameLength = checked.length === correctIndexes.length;
-        isCorrect = sameLength && checked.every((value, arrIdx) => value === correctIndexes[arrIdx]);
-        selectedOptionIndex = checked;
-        selectedOptionText = checked.length ? checked.map((value) => q.options[value]).join(" | ") : "";
-        correctOptionText = correctIndexes.length ? correctIndexes.map((value) => q.options[value]).join(" | ") : "";
-      } else {
-        const picked = document.querySelector('input[name="q-' + idx + '"]:checked');
-        selectedOptionIndex = picked ? Number(picked.value) : -1;
-        isCorrect = selectedOptionIndex === q.answer;
-        selectedOptionText = selectedOptionIndex >= 0 ? q.options[selectedOptionIndex] : "";
-      }
-
-      if (isCorrect) {
-        correct += 1;
-        byBlock[q.block].ok += 1;
-        byDimension[q.dimension].ok += 1;
-      }
-      const answerAt = q.lastChangedAtMs || Date.now();
-      const timeToAnswerSec = Math.max(0, Math.round((answerAt - q.renderedAtMs) / 1000));
-      return {
-        id: q.id,
-        dimension: q.dimension,
-        level: q.level,
-        module: q.module,
-        block: q.block,
-        text: q.text,
-        selectedOptionIndex: selectedOptionIndex,
-        selectedOptionText: selectedOptionText,
-        correctOptionIndex: q.answer,
-        correctOptionText: correctOptionText,
-        isCorrect: requiresManualReview ? null : isCorrect,
-        requiresManualReview: requiresManualReview,
-        timeToAnswerSec: timeToAnswerSec,
-        answerChangeCount: q.changeCount
-      };
-    });
-
-    const percent = autoGradableTotal > 0 ? Math.round((correct / autoGradableTotal) * 100) : 0;
-    const category = getCategory(percent);
-    const details = Object.keys(byBlock).map((block) => {
-      if (byBlock[block].total > 0) {
-        const p = Math.round((byBlock[block].ok / byBlock[block].total) * 100);
-        return "<li>" + block + ": " + byBlock[block].ok + "/" + byBlock[block].total + " (" + p + "%)" + (byBlock[block].manual > 0 ? ", открытые: " + byBlock[block].manual : "") + "</li>";
-      }
-      return "<li>" + block + ": автопроверка не применяется, открытые: " + byBlock[block].manual + "</li>";
-    }).join("");
-    const detailsByDimension = Object.keys(byDimension).map((dimension) => {
-      if (byDimension[dimension].total > 0) {
-        const p = Math.round((byDimension[dimension].ok / byDimension[dimension].total) * 100);
-        return "<li>" + dimension + ": " + byDimension[dimension].ok + "/" + byDimension[dimension].total + " (" + p + "%)" + (byDimension[dimension].manual > 0 ? ", открытые: " + byDimension[dimension].manual : "") + "</li>";
-      }
-      return "<li>" + dimension + ": автопроверка не применяется, открытые: " + byDimension[dimension].manual + "</li>";
-    }).join("");
-    const weakestBlocks = Object.keys(byBlock)
-      .map((block) => {
-        const p = byBlock[block].total > 0 ? Math.round((byBlock[block].ok / byBlock[block].total) * 100) : 100;
-        return { block: block, score: p };
-      })
-      .sort((a, b) => a.score - b.score)
-      .slice(0, 3);
-    const planText = weakestBlocks.map((item, idx) => {
-      if (idx === 0) return "30 дней: закрыть базовые пробелы по блоку '" + item.block + "' (чек-лист + 2 практики).";
-      if (idx === 1) return "60 дней: провести пробное занятие с наставником по блоку '" + item.block + "'.";
-      return "90 дней: повторная диагностика и корректировка методической траектории по блоку '" + item.block + "'.";
-    }).join("<br>");
-
-    const completedAt = new Date().toISOString();
-    const spentSecondsTotal = Math.round((Date.now() - sessionStartMs) / 1000);
-    resultPayload = {
-      sessionId: "sess-" + Date.now(),
-      completedAt: completedAt,
-      autoCompleted: auto,
-      totalQuestions: questions.length,
-      autoGradableQuestions: autoGradableTotal,
-      manualReviewQuestions: manualQuestionsCount,
-      correctAnswers: correct,
-      scorePercent: percent,
-      category: category.label,
-      spentSecondsTotal: spentSecondsTotal,
-      byBlock: byBlock,
-      byDimension: byDimension,
-      questions: questionLogs
-    };
-    localStorage.removeItem(autosaveKey);
-
-    resultBox.className = "question";
-    resultBox.innerHTML =
-      "<b>Результат автопроверки: " + correct + "/" + autoGradableTotal + " (" + percent + "%)</b><br>" +
-      (manualQuestionsCount > 0 ? "<small>Открытые ответы для ручной проверки: " + manualQuestionsCount + ".</small><br>" : "") +
-      'Категория: <span class="' + category.cls + '"><b>' + category.label + "</b></span><br>" +
-      (auto ? "<small>Тест завершен автоматически по таймеру.</small><br>" : "") +
-      "<b>Карта компетенций (3 измерения):</b><ul>" + detailsByDimension + "</ul>" +
-      "<b>Детализация по блокам:</b><ul>" + details + "</ul>" +
-      "<b>План адаптации 30-60-90:</b><br>" + planText + "<br>" +
-      "<small>Рекомендована пересдача после периода подготовки.</small><br>" +
-      "<b>Рекомендация:</b> " + category.tip;
-
-    submitBtn.disabled = true;
-    restartBtn.classList.remove("hidden");
-    exportPanel.classList.remove("hidden");
-    logNote.classList.remove("hidden");
-  }
-
-  function startQuiz() {
-    if (!baseQuestions.length) {
-      alert("Банк вопросов не загружен. Проверьте подключение файла questions.js");
-      return;
-    }
-    questions = buildShuffledQuestions().map((q) => ({
-      id: q.id,
-      block: q.block,
-      text: q.text,
-      dimension: q.dimension,
-      level: q.level,
-      module: q.module,
-      kind: q.kind,
-      match: q.match,
-      media: q.media,
-      acceptedAnswers: q.acceptedAnswers,
-      sequence: q.sequence,
-      options: q.options,
-      answer: q.answer,
-      renderedAtMs: Date.now(),
-      lastChangedAtMs: null,
-      changeCount: 0
-    }));
-    sessionStartMs = Date.now();
-    leftSec = limitSec;
-    timerEl.textContent = "Осталось: " + formatTime(leftSec);
-    resultBox.className = "question hidden";
-    resultBox.innerHTML = "";
-    resultPayload = null;
-    renderQuestions();
-    started = true;
-    startBtn.disabled = true;
-    submitBtn.disabled = false;
-    restartBtn.classList.add("hidden");
-    exportPanel.classList.add("hidden");
-    logNote.classList.add("hidden");
-
-    timerId = setInterval(() => {
-      leftSec -= 1;
-      timerEl.textContent = "Осталось: " + formatTime(Math.max(leftSec, 0));
+  if (prevBtn) {
+    prevBtn.addEventListener("click", function () {
+      if (currentIndex <= 0) return;
+      collectAnswer(currentIndex);
+      currentIndex -= 1;
+      renderCurrentQuestion();
       saveProgress();
-      if (leftSec <= 0) finishQuiz(true);
-    }, 1000);
-    saveProgress();
+    });
   }
 
-  startBtn.addEventListener("click", startQuiz);
-  submitBtn.addEventListener("click", function () { finishQuiz(false); });
-  restartBtn.addEventListener("click", function () {
-    clearInterval(timerId);
-    started = false;
-    startBtn.disabled = false;
-    submitBtn.disabled = true;
-    quizContainer.innerHTML = "";
-    resultBox.className = "question hidden";
-    resultBox.innerHTML = "";
-    timerEl.textContent = "Осталось: " + formatTime(limitSec);
-    resultPayload = null;
-    exportPanel.classList.add("hidden");
-    logNote.classList.add("hidden");
-    localStorage.removeItem(autosaveKey);
-  });
-  exportJsonBtn.addEventListener("click", function () {
-    if (!resultPayload) return;
-    downloadFile("pilot-test-result.json", JSON.stringify(resultPayload, null, 2), "application/json;charset=utf-8");
-  });
-  exportCsvBtn.addEventListener("click", function () {
-    if (!resultPayload) return;
-    const csv = toCsvRows(resultPayload);
-    downloadFile("pilot-test-result.csv", csv, "text/csv;charset=utf-8");
+  if (nextBtn) {
+    nextBtn.addEventListener("click", function () {
+      if (currentIndex >= questions.length - 1) return;
+      collectAnswer(currentIndex);
+      currentIndex += 1;
+      renderCurrentQuestion();
+      saveProgress();
+    });
+  }
+
+  if (submitBtn) submitBtn.addEventListener("click", function () { finishQuiz(false); });
+
+  if (restartBtn) {
+    restartBtn.addEventListener("click", function () {
+      const type = testType;
+      resetToSelection();
+      if (type) startTest(type);
+    });
+  }
+
+  if (backToSelectBtn) backToSelectBtn.addEventListener("click", function () {
+    if (started && !finished && !confirm("Прервать текущую сессию?")) return;
+    localStorage.removeItem(getAutosaveKey());
+    resetToSelection();
   });
 
-  if (pilotTitle) {
-    pilotTitle.textContent = "Пробный тест (единый список вопросов)";
+  if (exportJsonBtn) {
+    exportJsonBtn.addEventListener("click", function () {
+      if (!resultPayload) return;
+      downloadFile("test-result.json", JSON.stringify(resultPayload, null, 2), "application/json;charset=utf-8");
+    });
   }
-  if (pilotDesc) {
-    pilotDesc.textContent = "Формат пилота: объективные MCQ и прикладные кейсы. После завершения вы получите карту компетенций, план 30-60-90 и рекомендации.";
+
+  if (exportCsvBtn) {
+    exportCsvBtn.addEventListener("click", function () {
+      if (!resultPayload) return;
+      const csv = typeof window.buildResultCsv === "function"
+        ? window.buildResultCsv(resultPayload)
+        : "";
+      downloadFile("test-result.csv", csv, "text/csv;charset=utf-8");
+    });
   }
-  timerEl.textContent = "Осталось: " + formatTime(limitSec);
 
   if (fontIncBtn) {
     fontIncBtn.addEventListener("click", function () {
@@ -641,5 +731,34 @@
       document.body.style.fontSize = Math.max(current - 1, 14) + "px";
     });
   }
-  restoreProgress();
+
+  navLinks.forEach(function (link) {
+    link.addEventListener("click", function (event) {
+      if (started && !finished) {
+        event.preventDefault();
+        alert("Завершите тест или вернитесь на вкладку теста. Навигация по странице заблокирована.");
+      }
+    });
+  });
+
+  function renderCompetencyLegend() {
+    const container = document.getElementById("competency-levels-list");
+    if (!container || !window.COMPETENCY_LEVELS) return;
+    container.innerHTML = window.COMPETENCY_LEVELS.map(function (level) {
+      return (
+        '<article class="competency-level-card ' + level.cls + '">' +
+        '<span class="competency-level-range">' + level.min + "–" + level.max + "%</span>" +
+        "<h3>" + level.label + "</h3>" +
+        "<p>" + level.description + "</p>" +
+        "</article>"
+      );
+    }).join("");
+  }
+
+  renderCompetencyLegend();
+  showScreen("selection");
+  if (!restoreProgress()) {
+    showScreen("selection");
+  }
+
 })();
