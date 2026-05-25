@@ -58,7 +58,7 @@ window.calculateTestScore = function calculateTestScore(questions, gradeFn) {
       correct += 1;
       byCategory[cat].ok += 1;
     }
-    return Object.assign({ id: q.id, category: q.category, block: q.block, text: q.text, kind: q.kind }, grade);
+    return Object.assign({ id: q.id, category: q.category, block: q.block, text: q.text, kind: q.kind, needsManualReview: !!grade.needsManualReview }, grade);
   });
   const scorePercent = total > 0 ? Math.round((correct / total) * 100) : 0;
   const competency = window.getCompetencyLevel(scorePercent);
@@ -97,6 +97,8 @@ window.buildResultCsv = function buildResultCsv(payload) {
   const rows = [
     ["Поле", "Значение"],
     ["Тип теста", payload.testTitle || payload.testType || ""],
+    ["ФИО участника", payload.participantFullName || ""],
+    ["Email участника", payload.participantEmail || ""],
     ["Начало теста", window.formatSystemDateTime(startedMs)],
     ["Завершение теста", window.formatSystemDateTime(completedMs)],
     ["Правильных ответов", String(payload.correctAnswers)],
@@ -113,7 +115,7 @@ window.buildResultCsv = function buildResultCsv(payload) {
     rows.push([cat, String(row.ok), String(row.total), String(pct)]);
   });
   rows.push([]);
-  rows.push(["ID", "Категория", "Блок", "Тип", "Верно", "Ответ", "Правильный ответ"]);
+  rows.push(["ID", "Категория", "Блок", "Тип", "Верно", "Требует проверки", "Ответ", "Правильный ответ"]);
   (payload.questions || []).forEach(function (q) {
     rows.push([
       q.id || "",
@@ -121,6 +123,7 @@ window.buildResultCsv = function buildResultCsv(payload) {
       q.block || "",
       q.kind || "",
       q.isCorrect ? "да" : "нет",
+      q.needsManualReview ? "да" : "нет",
       q.selectedOptionText || "",
       q.correctOptionText || ""
     ]);

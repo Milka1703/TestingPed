@@ -1,0 +1,21 @@
+{
+  "name": "testingped",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "test:smtp": "node test-smtp.js",
+    "check": "node --check script.js && node --check scoring.js && node --check api/send-result.js && node --check server.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:api": "vitest run tests/api",
+    "test:unit": "vitest run tests/unit",
+    "test:smoke": "node tests/smoke/smoke.js"
+  },
+  "dependencies": {
+    "nodemailer": "^6.9.16"
+  },
+  "devDependencies": {
+    "vitest": "^3.1.1"
+  }
+}

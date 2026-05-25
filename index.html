@@ -3,66 +3,57 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>IT competence testing</title>
+  <title>The testing system</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header>
     <div class="container topline">
       <div>
-        <h1>Система тестирования на ИТ-компетентность</h1>
+        <h1>Система тестирования</h1>
         <p class="subtitle">Колледж IT.Москва</p>
       </div>
     </div>
   </header>
   <main class="container">
-    <section id="spec" class="grid">
-      <article class="card kpi">
-        <h3>Объем</h3>
-        <div class="score">30+</div>
-        <div class="muted">вопросов в банке</div>
-      </article>
-      <article class="card kpi">
-        <h3>Время</h3>
-        <div class="score">25 минут и <br>15 минут</div>
-        <div class="muted">формат: 30 и 20 вопросов</div>
-      </article>
-      <article class="card half">
-        <h2>Цели тестирования</h2>
-        <ul>
-          <li>Диагностика зон роста</li>
-          <li>Выявление дефицитов и снижение рисков выгорания.</li>
-          <li>Построение индивидуальной траектории адаптации и методической поддержки.</li>
-        </ul>
-        <span class="pill">Прозрачность</span>
-        <span class="pill">Объективность</span>
-        <span class="pill">Развитие</span>
-      </article>
-
-    </section>
     <section id="pilot-test" class="grid" style="margin-top: 14px;">
       <article class="card wide">
-        <div id="test-selection-screen">
-          <h2 class="test-choice-title">Выберите тип тестирования</h2>
-          <div class="test-choice-grid">
-            <article class="test-choice-card">
-              <h3>Для действующих преподавателей</h3>
-              <ul class="test-choice-meta">
-                <li>30 вопросов</li>
-                <li>25 минут</li>
-              </ul>
-              <button type="button" class="btn btn-primary" data-test-type="teacher_test">Начать тест</button>
-            </article>
-            <article class="test-choice-card">
-              <h3>Для кандидатов на собеседование</h3>
-              <ul class="test-choice-meta">
-                <li>20 вопросов</li>
-                <li>15 минут</li>
-              </ul>
-              <button type="button" class="btn btn-primary" data-test-type="candidate_test">Начать тест</button>
-            </article>
+        <section id="home-screen">
+          <h2 class="test-choice-title">Тестирование доступно по персональной ссылке</h2>
+          <p class="test-link-note">Роль не указана. Откройте персональную ссылку, полученную от организатора тестирования.</p>
+        </section>
+        <section id="teacher-screen" class="hidden">
+          <h2>Для действующих преподавателей</h2>
+          <ul class="test-choice-meta">
+            <li>30 вопросов</li>
+            <li>25 минут</li>
+          </ul>
+          <label class="participant-name-label">
+            <span>ФИО участника</span>
+            <input class="participant-name-input" type="text" data-full-name autocomplete="name" placeholder="Иванов Иван Иванович" required>
+          </label>
+          <label class="participant-name-label">
+            <span>Email участника</span>
+            <input class="participant-email-input" type="email" data-email autocomplete="email" placeholder="ivanov@itmoscow.pro" required>
+          </label>
+          <div class="role-actions">
+            <button type="button" class="btn btn-primary" data-test-type="teacher_test">Начать тест</button>
           </div>
-        </div>
+        </section>
+        <section id="candidate-screen" class="hidden">
+          <h2>Для кандидатов на собеседование</h2>
+          <ul class="test-choice-meta">
+            <li>20 вопросов</li>
+            <li>15 минут</li>
+          </ul>
+          <label class="participant-name-label">
+            <span>ФИО участника</span>
+            <input class="participant-name-input" type="text" data-full-name autocomplete="name" placeholder="Иванов Иван Иванович" required>
+          </label>
+          <div class="role-actions">
+            <button type="button" class="btn btn-primary" data-test-type="candidate_test">Начать тест</button>
+          </div>
+        </section>
         <div id="quiz-screen" class="hidden">
           <div class="quiz-head">
             <h2 id="pilot-title">Тестирование на ИТ-компетентность</h2>
@@ -84,30 +75,43 @@
           </div>
           <div id="quiz-result" class="question hidden" style="margin-top: 12px;"></div>
           <div class="quiz-actions hidden" id="quiz-actions-done">
-            <button type="button" class="btn btn-primary" id="restart-btn">Пройти ещё раз</button>
-            <button type="button" class="btn" id="back-to-select-btn">Выбрать другой тест</button>
+            <button type="button" class="btn" id="back-to-select-btn">Вернуться к старту</button>
           </div>
-          <div class="export-panel hidden" id="export-panel">
-            <button type="button" class="btn btn-primary" id="export-csv-btn">Скачать результат</button>
-            <button type="button" class="btn" id="export-json-btn">Экспорт JSON</button>
-          </div>
+          <p class="mini hidden" id="result-delivery-status"></p>
           <p class="mini hidden" id="log-note">Лог времени по каждому вопросу включен в экспорт.</p>
         </div>
       </article>
     </section>
-    <section id="competency-levels" class="grid" style="margin-top: 14px;">
-      <article class="card wide">
-        <h2>Уровни компетенции</h2>
-        <p class="muted mini" style="margin-bottom: 12px;">
-          Единые процентные критерии для теста действующих преподавателей и кандидатов на собеседование.
-        </p>
-        <div id="competency-levels-list" class="competency-levels-list" aria-label="Уровни и диапазоны баллов"></div>
-      </article>
-    </section>
   </main>
+  <!-- Банк вопросов и legacy-модули -->
   <script src="questions.js"></script>
   <script src="test-generator.js"></script>
   <script src="scoring.js"></script>
-  <script src="script.js"></script>
+
+  <!-- Конфигурация -->
+  <script>
+    window.RESULT_EMAIL_ENDPOINT = window.location.port === "5500"
+      ? "http://localhost:3000/api/send-result"
+      : "/api/send-result";
+    window.RESULT_RECIPIENT_EMAIL = "seregina_ld@itmoscow.pro";
+  </script>
+
+  <!-- Модульная архитектура (разделение монолита script.js) -->
+  <script src="js/state.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/grading.js"></script>
+  <script src="js/screen.js"></script>
+  <script src="js/question-bank.js"></script>
+  <script src="js/question-renderer.js"></script>
+  <script src="js/answer-collector.js"></script>
+  <script src="js/scoring-ui.js"></script>
+  <script src="js/timer.js"></script>
+  <script src="js/tab-guard.js"></script>
+  <script src="js/autosave.js"></script>
+  <script src="js/vpn-check.js"></script>
+  <script src="js/email-sender.js"></script>
+  <script src="js/navigation.js"></script>
+  <script src="js/quiz-controller.js"></script>
+  <script src="js/main.js"></script>
 </body>
 </html>

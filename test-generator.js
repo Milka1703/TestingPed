@@ -16,7 +16,8 @@ window.TEST_CONFIGS = {
     totalQuestions: 30,
     timeLimitSec: 25 * 60,
     minPerCategory: 2,
-    maxPerCategory: 4
+    maxPerCategory: 4,
+    excludeTextInput: false
   },
   candidate_test: {
     id: "candidate_test",
@@ -24,7 +25,8 @@ window.TEST_CONFIGS = {
     totalQuestions: 20,
     timeLimitSec: 15 * 60,
     minPerCategory: 2,
-    maxPerCategory: 3
+    maxPerCategory: 3,
+    excludeTextInput: true
   }
 };
 
@@ -115,7 +117,19 @@ window.selectPilotTest = function selectPilotTest(testTypeId, sourceQuestions) {
     throw new Error("Неизвестный тип теста: " + testTypeId);
   }
 
-  const bank = Array.isArray(sourceQuestions) ? sourceQuestions : (window.PILOT_QUESTIONS || []);
+  var bank = Array.isArray(sourceQuestions) ? sourceQuestions : (window.PILOT_QUESTIONS || []);
+
+  // Фильтрация вопросов с текстовым вводом для candidate
+  if (config.excludeTextInput) {
+    bank = bank.filter(function (q) {
+      // Исключаем fill_blank
+      if (q.kind === "fill_blank") return false;
+      // Исключаем open-вопросы без вариантов ответа (с ключевыми словами — текстовый ввод)
+      if (q.kind === "open" && Array.isArray(q.keywords) && q.keywords.length) return false;
+      return true;
+    });
+  }
+
   const counts = window.generateCategoryCounts(config);
   const pools = {};
   window.PILOT_TEST_CATEGORIES.forEach(function (category) {

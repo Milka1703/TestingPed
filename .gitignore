@@ -1,0 +1,18 @@
+node_modules/
+.env
+
+# Development utilities
+test-smtp.js
+docx_questions_extract.txt
+extract_docx_questions.py
+generate_questions_from_extract.js
+
+# Old monolithic script — replaced by modular js/
+script.js
+
+# Test infrastructure (not part of the site)
+vitest.config.js
+tests/
+
+# Documentation and plans (not part of the site)
+plans/

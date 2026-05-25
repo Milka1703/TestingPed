@@ -2,7 +2,9 @@
   const baseQuestions = Array.isArray(window.PILOT_QUESTIONS) ? window.PILOT_QUESTIONS : [];
   const AUTOSAVE_PREFIX = "it_competence_test_v2";
 
-  const selectionScreen = document.getElementById("test-selection-screen");
+  const homeScreen = document.getElementById("home-screen");
+  const teacherScreen = document.getElementById("teacher-screen");
+  const candidateScreen = document.getElementById("candidate-screen");
   const quizScreen = document.getElementById("quiz-screen");
   const quizContainer = document.getElementById("quiz-container");
   const resultBox = document.getElementById("quiz-result");
@@ -20,11 +22,25 @@
   const exportPanel = document.getElementById("export-panel");
   const exportJsonBtn = document.getElementById("export-json-btn");
   const exportCsvBtn = document.getElementById("export-csv-btn");
+  const resultDeliveryStatus = document.getElementById("result-delivery-status");
   const logNote = document.getElementById("log-note");
   const fontIncBtn = document.getElementById("font-inc-btn");
   const fontDecBtn = document.getElementById("font-dec-btn");
   const navLinks = document.querySelectorAll("header nav a");
+  const TEST_SCREEN_BY_TYPE = {
+    teacher_test: "teacher-screen",
+    candidate_test: "candidate-screen"
+  };
+  const TEST_TYPE_ALIASES = {
+    teacher: "teacher_test",
+    teacher_test: "teacher_test",
+    преподаватель: "teacher_test",
+    candidate: "candidate_test",
+    candidate_test: "candidate_test",
+    кандидат: "candidate_test"
+  };
 
+  let selectedTestType = null;
   let testType = null;
   let testConfig = null;
   let questions = [];
@@ -36,6 +52,8 @@
   let sessionStartMs = 0;
   let resultPayload = null;
   let timerWarningShown = false;
+  let participantFullName = "";
+  let participantEmail = "";
 
   function getAutosaveKey() {
     return AUTOSAVE_PREFIX + "_" + (testType || "none");
@@ -62,12 +80,166 @@
     return String(value || "")
       .trim()
       .toLowerCase()
+      .replace(/ё/g, "е")
       .replace(/\s+/g, " ");
   }
 
-  function showScreen(screen) {
-    if (selectionScreen) selectionScreen.classList.toggle("hidden", screen !== "selection");
-    if (quizScreen) quizScreen.classList.toggle("hidden", screen !== "quiz");
+  function normalizeKeywordGroups(keywords) {
+    if (!Array.isArray(keywords) || !keywords.length) return [];
+    return keywords.map(function (group) {
+      const alternatives = Array.isArray(group) ? group : [group];
+      return alternatives.map(function (kw) { return normalizeText(kw); }).filter(Boolean);
+    }).filter(function (group) { return group.length > 0; });
+  }
+
+  function formatKeywordsHint(keywords) {
+    const groups = normalizeKeywordGroups(keywords);
+    if (!groups.length) return "";
+    return groups.map(function (group) { return group.join(" / "); }).join("; ");
+  }
+
+  function matchKeywordGroups(answer, keywords) {
+    const groups = normalizeKeywordGroups(keywords);
+    if (!groups.length) return false;
+    const answerNorm = normalizeText(answer);
+    return groups.every(function (group) {
+      return group.some(function (kw) { return answerNorm.includes(kw); });
+    });
+  }
+
+  function normalizeFullName(value) {
+    return String(value || "").trim().replace(/\s+/g, " ");
+  }
+
+  function escapeHtml(value) {
+    return String(value || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function showScreen(screenId) {
+    [homeScreen, teacherScreen, candidateScreen, quizScreen].forEach(function (screen) {
+      if (screen) screen.classList.toggle("hidden", screen.id !== screenId);
+    });
+  }
+
+  function normalizeTestType(value) {
+    return TEST_TYPE_ALIASES[String(value || "").trim().toLowerCase()] || null;
+  }
+
+  function getLinkedTestType() {
+    const params = new URLSearchParams(window.location.search);
+    return (
+      normalizeTestType(params.get("test")) ||
+      normalizeTestType(params.get("role")) ||
+      normalizeTestType(window.location.hash.replace(/^#/, ""))
+    );
+  }
+
+  function getStartScreenId(typeId) {
+    return TEST_SCREEN_BY_TYPE[typeId] || "home-screen";
+  }
+
+  function setSelectedTestType(typeId) {
+    selectedTestType = typeId || null;
+    if (selectedTestType) {
+      document.body.dataset.testType = selectedTestType;
+    } else {
+      delete document.body.dataset.testType;
+    }
+  }
+
+  function isCandidateTest(typeId) {
+    return typeId === "candidate_test";
+  }
+
+  function updateExportPanel(typeId, showAfterFinish) {
+    if (!exportPanel) return;
+    if (isCandidateTest(typeId)) {
+      exportPanel.classList.add("hidden");
+      return;
+    }
+    if (showAfterFinish) exportPanel.classList.remove("hidden");
+    else exportPanel.classList.add("hidden");
+  }
+
+  function showStartScreen(typeId) {
+    setSelectedTestType(typeId);
+    updateExportPanel(typeId, false);
+    showScreen(getStartScreenId(typeId));
+  }
+
+  function handleRoleSelection(event) {
+    const button = event.target.closest("button");
+    if (!button) return;
+
+    const navTarget = button.getAttribute("data-nav-target");
+    if (navTarget) {
+      event.preventDefault();
+      showStartScreen(selectedTestType || getLinkedTestType());
+      return;
+    }
+
+    const typeId = button.getAttribute("data-test-type") || selectedTestType;
+    if (!typeId) return;
+
+    event.preventDefault();
+    if (started) return;
+    if (selectedTestType && selectedTestType !== typeId) return;
+
+    const section = button.closest("section");
+    const nameInput = section ? section.querySelector("[data-full-name]") : null;
+    const emailInput = section ? section.querySelector("[data-email]") : null;
+    const fullName = normalizeFullName(nameInput ? nameInput.value : participantFullName);
+    const email = emailInput ? String(emailInput.value || "").trim() : participantEmail;
+
+    if (!fullName) {
+      alert("Введите ФИО перед началом теста.");
+      if (nameInput) {
+        nameInput.setAttribute("aria-invalid", "true");
+        nameInput.focus();
+      }
+      return;
+    }
+    if (nameInput) nameInput.removeAttribute("aria-invalid");
+
+    // Для teacher проверяем email
+    if (typeId === "teacher_test") {
+      if (!email) {
+        alert("Введите email перед началом теста.");
+        if (emailInput) {
+          emailInput.setAttribute("aria-invalid", "true");
+          emailInput.focus();
+        }
+        return;
+      }
+      // Простейшая валидация email
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        alert("Введите корректный email.");
+        if (emailInput) {
+          emailInput.setAttribute("aria-invalid", "true");
+          emailInput.focus();
+        }
+        return;
+      }
+      if (emailInput) emailInput.removeAttribute("aria-invalid");
+    }
+
+    participantEmail = email;
+    startTest(typeId, fullName);
+  }
+
+  function initRoleNavigation() {
+    const main = document.querySelector("main");
+    if (!main) return;
+    main.addEventListener("click", handleRoleSelection);
+    main.addEventListener("input", function (event) {
+      if (event.target.matches("[data-full-name]")) event.target.removeAttribute("aria-invalid");
+      if (event.target.matches("[data-email]")) event.target.removeAttribute("aria-invalid");
+    });
   }
 
   function setNavLocked(locked) {
@@ -117,6 +289,7 @@
           match: Array.isArray(q.match) ? q.match : null,
           media: Array.isArray(q.media) ? q.media : null,
           acceptedAnswers: Array.isArray(q.acceptedAnswers) ? q.acceptedAnswers : null,
+          keywords: Array.isArray(q.keywords) ? q.keywords : null,
           sequence: q.sequence.slice(),
           category: q.category || null,
           block: q.block,
@@ -144,6 +317,7 @@
         match: Array.isArray(q.match) ? q.match : null,
         media: Array.isArray(q.media) ? q.media : null,
         acceptedAnswers: Array.isArray(q.acceptedAnswers) ? q.acceptedAnswers : null,
+        keywords: Array.isArray(q.keywords) ? q.keywords : null,
         sequence: Array.isArray(q.sequence) ? q.sequence.slice() : null,
         category: q.category || null,
         block: q.block,
@@ -279,49 +453,71 @@
       q.kind === "sequence" ? '<span class="pill kind-pill">Последовательность</span>' : "",
       q.kind === "multi" ? '<span class="pill kind-pill">Множественный выбор</span>' : ""
     ].filter(Boolean).join("<br>");
-    const categoryLine = q.category ? '<span class="pill">' + q.category + "</span><br>" : "";
+    const categoryLine = q.category ? '<span class="pill">' + escapeHtml(q.category) + "</span><br>" : "";
     return (
       "<" + d + ' class="question" data-question-index="' + idx + '">' +
       categoryLine + kindPills + (kindPills ? "<br>" : "") +
-      "<b>" + q.text + "</b>" + mediaHtml +
+      "<b>" + escapeHtml(q.text) + "</b>" + mediaHtml +
       "<" + d + ' class="options">' + optionsHtml + "</" + d + "></" + d + ">"
     );
   }
 
-  function bindQuestionControls(idx) {
-    const controls = quizContainer.querySelectorAll("input[type='radio'], input[type='checkbox'], select[data-match='1'], select[data-sequence='1'], textarea[data-open='1'], input[data-fill='1']");
-    controls.forEach(function (control) {
-      const eventName = control.tagName === "TEXTAREA" || (control.tagName === "INPUT" && control.getAttribute("data-fill") === "1") ? "input" : "change";
-      control.addEventListener(eventName, function () {
-        collectAnswer(idx);
-        const q = questions[idx];
-        if (q) q.changeCount = (q.changeCount || 0) + 1;
-        saveProgress();
-      });
-    });
+  function onQuizContainerChange(event) {
+    var target = event.target;
+    var questionEl = target.closest(".question");
+    if (!questionEl) return;
+    var idx = parseInt(questionEl.getAttribute("data-question-index"), 10);
+    if (isNaN(idx)) return;
+
+    var isInput = target.matches('input[type="radio"], input[type="checkbox"]');
+    var isSelect = target.matches("select");
+    var isTextInput = target.matches('textarea[data-open="1"], input[data-fill="1"]');
+    if (!isInput && !isSelect && !isTextInput) return;
+
+    collectAnswer(idx);
+    var q = questions[idx];
+    if (q) q.changeCount = (q.changeCount || 0) + 1;
+    saveProgress();
   }
+
+  function bindQuizContainerListener() {
+    if (quizContainer) {
+      quizContainer.removeEventListener("change", onQuizContainerChange);
+      quizContainer.removeEventListener("input", onQuizContainerChange);
+      quizContainer.addEventListener("change", onQuizContainerChange);
+      quizContainer.addEventListener("input", onQuizContainerChange);
+    }
+  }
+
 
   function renderCurrentQuestion() {
     const q = questions[currentIndex];
     if (!q || !quizContainer) return;
     quizContainer.innerHTML = renderQuestionHtml(q, currentIndex);
     applySavedAnswer(currentIndex);
-    bindQuestionControls(currentIndex);
     updateProgress();
     updateNavButtons();
   }
 
+  var _saveTimeout = null;
+
   function saveProgress() {
     if (!started || finished || !testType) return;
-    collectAnswer(currentIndex);
-    localStorage.setItem(getAutosaveKey(), JSON.stringify({
-      testType: testType,
-      leftSec: leftSec,
-      currentIndex: currentIndex,
-      sessionStartMs: sessionStartMs,
-      timerWarningShown: timerWarningShown,
-      questions: questions
-    }));
+    if (_saveTimeout) clearTimeout(_saveTimeout);
+    _saveTimeout = setTimeout(function () {
+      _saveTimeout = null;
+      collectAnswer(currentIndex);
+      localStorage.setItem(getAutosaveKey(), JSON.stringify({
+        testType: testType,
+        participantFullName: participantFullName,
+        participantEmail: participantEmail,
+        leftSec: leftSec,
+        currentIndex: currentIndex,
+        sessionStartMs: sessionStartMs,
+        timerWarningShown: timerWarningShown,
+        questions: questions
+      }));
+    }, 300);
   }
 
   function enableTabGuard() {
@@ -372,7 +568,12 @@
     return window.selectPilotTest(typeId, baseQuestions);
   }
 
-  function startTest(typeId) {
+  function startTest(typeId, fullName) {
+    const normalizedFullName = normalizeFullName(fullName);
+    if (!normalizedFullName) {
+      alert("Введите ФИО перед началом теста.");
+      return;
+    }
     if (!baseQuestions.length) {
       alert("Банк вопросов не загружен.");
       return;
@@ -394,6 +595,8 @@
       return;
     }
 
+    setSelectedTestType(typeId);
+    participantFullName = normalizedFullName;
     testType = typeId;
     testConfig = config;
     finished = false;
@@ -417,9 +620,11 @@
     }
     if (quizActionsDone) quizActionsDone.classList.add("hidden");
     if (exportPanel) exportPanel.classList.add("hidden");
+    if (resultDeliveryStatus) resultDeliveryStatus.classList.add("hidden");
     if (logNote) logNote.classList.add("hidden");
 
-    showScreen("quiz");
+    if (quizScreen) quizScreen.setAttribute("data-test-type", typeId);
+    showScreen("quiz-screen");
     setNavLocked(true);
     started = true;
     renderCurrentQuestion();
@@ -432,6 +637,7 @@
     let isCorrect = false;
     let selectedOptionText = "";
     let correctOptionText = "";
+    let needsManualReview = false;
     const saved = q.savedAnswer;
 
     if (q.kind === "matching" && Array.isArray(q.match)) {
@@ -447,6 +653,7 @@
       selectedOptionText = selectedSequence.map(function (val, seqIdx) { return (seqIdx + 1) + ") " + (val || "—"); }).join(" | ");
       correctOptionText = q.sequence.map(function (item, seqIdx) { return (seqIdx + 1) + ") " + item; }).join(" | ");
     } else if (q.kind === "fill_blank") {
+      needsManualReview = true;
       const userValue = typeof saved === "string" ? saved : "";
       selectedOptionText = userValue;
       const accepted = Array.isArray(q.acceptedAnswers) && q.acceptedAnswers.length
@@ -465,9 +672,17 @@
         correctOptionText = q.options[q.answer] || "";
         isCorrect = normalizeText(userValue) === normalizeText(correctOptionText);
       } else {
+        needsManualReview = true;
         selectedOptionText = typeof saved === "string" ? saved : "";
-        correctOptionText = "—";
-        isCorrect = false;
+        const keywords = Array.isArray(q.keywords) ? q.keywords : null;
+        const accepted = Array.isArray(q.acceptedAnswers) ? q.acceptedAnswers : [];
+        if (keywords && keywords.length) {
+          correctOptionText = "Ключевые слова: " + formatKeywordsHint(keywords);
+          isCorrect = matchKeywordGroups(selectedOptionText, keywords);
+        } else {
+          correctOptionText = accepted.length ? accepted.join(" / ") : "—";
+          isCorrect = accepted.length ? accepted.map(normalizeText).includes(normalizeText(selectedOptionText)) : false;
+        }
       }
     } else if (q.kind === "multi") {
       const checked = Array.isArray(saved) ? saved.slice().sort(function (a, b) { return a - b; }) : [];
@@ -482,10 +697,10 @@
       correctOptionText = q.answer >= 0 ? q.options[q.answer] : "";
     }
 
-    return { isCorrect: isCorrect, selectedOptionText: selectedOptionText, correctOptionText: correctOptionText };
+    return { isCorrect: isCorrect, selectedOptionText: selectedOptionText, correctOptionText: correctOptionText, needsManualReview: needsManualReview };
   }
 
-  function renderResultHtml(score) {
+  function renderTeacherResultHtml(score, hasManualReview) {
     const level = score.competency;
     const categoryDetails = (window.PILOT_TEST_CATEGORIES || Object.keys(score.byCategory)).map(function (cat) {
       const row = score.byCategory[cat] || { ok: 0, total: 0 };
@@ -493,6 +708,11 @@
       const p = Math.round((row.ok / row.total) * 100);
       return "<li><span class=\"cat-name\">" + cat + "</span>: " + row.ok + "/" + row.total + " (" + p + "%)</li>";
     }).filter(Boolean).join("");
+
+    var manualReviewHtml = "";
+    if (hasManualReview) {
+      manualReviewHtml = '<div class="manual-review-warning"><b>Внимание!</b> Часть вопросов требует ручной проверки администратором. Итоговый результат может быть скорректирован.</div>';
+    }
 
     return (
       '<div class="result-summary ' + level.cls + '">' +
@@ -503,7 +723,51 @@
       '<p class="competency-desc">' + level.description + "</p>" +
       "</div>" +
       "</div>" +
+      manualReviewHtml +
       "<b>Разбивка по категориям:</b><ul class=\"result-categories\">" + categoryDetails + "</ul>"
+    );
+  }
+
+  function renderTeacherThanksHtml(score, hasManualReview) {
+    var manualReviewHtml = "";
+    if (hasManualReview) {
+      manualReviewHtml = '<div class="manual-review-warning"><b>Внимание!</b> В тесте присутствуют вопросы, проверяемые вручную администратором. Итоговый результат может быть скорректирован.</div>';
+    }
+
+    return (
+      '<div class="result-summary teacher-thanks">' +
+      '<div class="thanks-icon">✓</div>' +
+      "<h3>Спасибо за прохождение тестирования!</h3>" +
+      '<p>Сертификат поступит на указанную вами электронную почту.</p>' +
+      '<div class="result-score-line"><span class="result-score-value">' + score.scorePercent + '%</span></div>' +
+      '<p class="result-meta">Правильных ответов: <b>' + score.correct + "</b> из <b>" + score.total + "</b></p>" +
+      "</div>" +
+      manualReviewHtml +
+      '<div id="teacher-detailed-results" class="hidden">' +
+      '<div class="result-summary ' + score.competency.cls + '">' +
+      '<div class="competency-badge ' + score.competency.cls + '">' +
+      "<b>" + score.competency.label + "</b>" +
+      '<p class="competency-desc">' + score.competency.description + "</p>" +
+      "</div>" +
+      "</div>" +
+      "<b>Разбивка по категориям:</b><ul class=\"result-categories\">" + (window.PILOT_TEST_CATEGORIES || Object.keys(score.byCategory)).map(function (cat) {
+        const row = score.byCategory[cat] || { ok: 0, total: 0 };
+        if (!row.total) return "";
+        const p = Math.round((row.ok / row.total) * 100);
+        return "<li><span class=\"cat-name\">" + cat + "</span>: " + row.ok + "/" + row.total + " (" + p + "%)</li>";
+      }).filter(Boolean).join("") + "</ul>" +
+      "</div>"
+    );
+  }
+
+
+  function renderCandidateResultHtml(score) {
+    return (
+      '<div class="result-summary">' +
+      "<h3>Спасибо за прохождение тестирования</h3>" +
+      '<p class="result-meta">Ваш общий результат:</p>' +
+      '<div class="result-score-line"><span class="result-score-value">' + score.scorePercent + "%</span></div>" +
+      "</div>"
     );
   }
 
@@ -547,10 +811,16 @@
         };
       })();
 
+    // Определяем, есть ли вопросы, требующие ручной проверки
+    var hasManualReview = score.questions.some(function (g) { return g.needsManualReview; });
+
     const completedAtMs = Date.now();
     resultPayload = {
       testType: testType,
       testTitle: testConfig ? testConfig.title : testType,
+      participantFullName: participantFullName,
+      participantEmail: participantEmail,
+      recipientEmail: window.RESULT_RECIPIENT_EMAIL || "",
       sessionStartMs: sessionStartMs,
       startedAt: new Date(sessionStartMs).toISOString(),
       completedAtMs: completedAtMs,
@@ -567,6 +837,7 @@
       questions: score.questions
     };
     localStorage.removeItem(getAutosaveKey());
+    sendResultCsvByEmail(resultPayload);
 
     if (quizContainer) quizContainer.innerHTML = "";
     if (prevBtn) prevBtn.disabled = true;
@@ -574,25 +845,38 @@
     if (submitBtn) submitBtn.classList.add("hidden");
 
     if (resultBox) {
+      const isCandidateTest = testType === "candidate_test";
       resultBox.className = "question result-panel";
-      resultBox.innerHTML =
-        "<b>" + (testConfig ? testConfig.title : "Результат") + "</b><br>" +
-        (auto ? "<small>Тест завершён автоматически по таймеру.</small><br>" : "") +
-        renderResultHtml(score);
+      if (isCandidateTest) {
+        resultBox.innerHTML =
+          "<b>" + (testConfig ? testConfig.title : "Результат") + "</b><br>" +
+          "<small>Участник: " + escapeHtml(participantFullName) + "</small><br>" +
+          (auto ? "<small>Тест завершён автоматически по таймеру.</small><br>" : "") +
+          renderCandidateResultHtml(score);
+      } else {
+        resultBox.innerHTML =
+          "<b>" + (testConfig ? testConfig.title : "Результат") + "</b><br>" +
+          "<small>Участник: " + escapeHtml(participantFullName) + "</small><br>" +
+          "<small>Email: " + escapeHtml(participantEmail) + "</small><br>" +
+          (auto ? "<small>Тест завершён автоматически по таймеру.</small><br>" : "") +
+          renderTeacherThanksHtml(score, hasManualReview);
+      }
     }
     if (quizActionsDone) quizActionsDone.classList.remove("hidden");
-    if (exportPanel) exportPanel.classList.remove("hidden");
-    if (logNote) logNote.classList.remove("hidden");
+    updateExportPanel(testType, !isCandidateTest(testType));
+    if (logNote) logNote.classList.toggle("hidden", isCandidateTest(testType));
     if (timerEl) timerEl.classList.remove("timer-urgent");
   }
 
   function resetToSelection() {
+    const nextType = selectedTestType || testType || getLinkedTestType();
     clearInterval(timerId);
     if (testType) localStorage.removeItem(getAutosaveKey());
     started = false;
     finished = false;
     testType = null;
     testConfig = null;
+    participantFullName = "";
     questions = [];
     currentIndex = 0;
     timerWarningShown = false;
@@ -611,11 +895,12 @@
       timerEl.textContent = "25:00";
       timerEl.classList.remove("timer-urgent");
     }
-    showScreen("selection");
+    if (quizScreen) quizScreen.removeAttribute("data-test-type");
+    showStartScreen(nextType);
   }
 
-  function restoreProgress() {
-    const types = ["teacher_test", "candidate_test"];
+  function restoreProgress(typeId) {
+    const types = typeId ? [typeId] : ["teacher_test", "candidate_test"];
     for (let i = 0; i < types.length; i += 1) {
       const key = AUTOSAVE_PREFIX + "_" + types[i];
       const raw = localStorage.getItem(key);
@@ -624,6 +909,9 @@
         const saved = JSON.parse(raw);
         if (!saved || !Array.isArray(saved.questions) || !saved.questions.length) continue;
         testType = saved.testType || types[i];
+        setSelectedTestType(testType);
+        participantFullName = normalizeFullName(saved.participantFullName);
+        participantEmail = typeof saved.participantEmail === "string" ? saved.participantEmail : "";
         testConfig = window.TEST_CONFIGS[testType];
         questions = saved.questions;
         currentIndex = typeof saved.currentIndex === "number" ? saved.currentIndex : 0;
@@ -632,9 +920,10 @@
         timerWarningShown = !!saved.timerWarningShown;
         started = true;
         finished = false;
+        if (quizScreen) quizScreen.setAttribute("data-test-type", testType);
         if (pilotTitle && testConfig) pilotTitle.textContent = testConfig.title;
         if (timerWarning) timerWarning.classList.toggle("hidden", !timerWarningShown);
-        showScreen("quiz");
+        showScreen("quiz-screen");
         setNavLocked(true);
         renderCurrentQuestion();
         startTimer();
@@ -645,6 +934,139 @@
       }
     }
     return false;
+  }
+
+  function buildResultFilename(payload) {
+    const date = new Date().toISOString().slice(0, 10);
+    const name = normalizeFullName(payload.participantFullName)
+      .replace(/[^a-zA-Zа-яА-ЯёЁ0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "") || "participant";
+    return "test-result-" + name + "-" + date + ".csv";
+  }
+
+  function buildResultCsv(payload) {
+    return typeof window.buildResultCsv === "function"
+      ? window.buildResultCsv(payload)
+      : "";
+  }
+
+  function setDeliveryStatus(message, isError) {
+    if (!resultDeliveryStatus) return;
+    resultDeliveryStatus.textContent = message;
+    resultDeliveryStatus.classList.remove("hidden");
+    resultDeliveryStatus.classList.toggle("bad", !!isError);
+  }
+
+  var _vpnCheckResolved = false;
+  var _vpnDetected = false;
+
+  function detectVPN(callback) {
+    // Используем ip-api.com для обнаружения VPN/прокси (бесплатно, без ключа)
+    var xhr = new XMLHttpRequest();
+    xhr.open("GET", "https://ip-api.com/json/?fields=query,proxy,hosting", true);
+    xhr.timeout = 5000;
+    xhr.onload = function () {
+      try {
+        var data = JSON.parse(xhr.responseText);
+        // proxy=true или hosting=true указывает на VPN/прокси/датацентр
+        if (data.proxy === true || data.hosting === true) {
+          callback(true);
+        } else {
+          callback(false);
+        }
+      } catch (e) {
+        // Если не удалось проверить — не блокируем
+        callback(false);
+      }
+    };
+    xhr.onerror = function () {
+      callback(false);
+    };
+    xhr.ontimeout = function () {
+      callback(false);
+    };
+    xhr.send();
+  }
+
+  function showVpnWarning() {
+    if (resultDeliveryStatus) {
+      resultDeliveryStatus.innerHTML = '<div class="vpn-warning"><b>Обнаружено использование VPN-сервиса</b>Отправка результатов недоступна. Пожалуйста, отключите VPN и повторите попытку, либо свяжитесь с администратором.</div>';
+      resultDeliveryStatus.classList.remove("hidden");
+    }
+  }
+
+  function sendResultCsvByEmail(payload) {
+    const endpoint = window.RESULT_EMAIL_ENDPOINT;
+    if (!endpoint) {
+      console.warn("RESULT_EMAIL_ENDPOINT is not configured. CSV email sending is skipped.");
+      return;
+    }
+
+    const csv = buildResultCsv(payload);
+    if (!csv) {
+      setDeliveryStatus("Не удалось сформировать CSV для отправки.", true);
+      return;
+    }
+
+    // Проверка VPN перед отправкой
+    detectVPN(function (isVpn) {
+      _vpnDetected = isVpn;
+      _vpnCheckResolved = true;
+
+      if (isVpn) {
+        showVpnWarning();
+        return;
+      }
+
+      doSendEmail(endpoint, csv, payload);
+    });
+
+    // Если проверка VPN затянулась, отправляем через 6 секунд в любом случае
+    setTimeout(function () {
+      if (!_vpnCheckResolved) {
+        _vpnCheckResolved = true;
+        doSendEmail(endpoint, csv, payload);
+      }
+    }, 6000);
+  }
+
+  function doSendEmail(endpoint, csv, payload) {
+    fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        csvContent: csv,
+        filename: buildResultFilename(payload),
+        testType: payload.testType || "",
+        testTitle: payload.testTitle || "",
+        participantFullName: payload.participantFullName || "",
+        participantEmail: payload.participantEmail || "",
+        scorePercent: payload.scorePercent || 0,
+        to: payload.recipientEmail || window.RESULT_RECIPIENT_EMAIL || ""
+      })
+    })
+      .then(function (response) {
+        return response.json().catch(function () {
+          return { error: "HTTP " + response.status };
+        }).then(function (data) {
+          if (!response.ok) throw new Error(data.error || "HTTP " + response.status);
+          if (resultDeliveryStatus) {
+            resultDeliveryStatus.textContent = "";
+            resultDeliveryStatus.classList.add("hidden");
+          }
+        });
+      })
+      .catch(function (err) {
+        const serverMessage = err && err.message ? err.message : "";
+        const message = serverMessage
+          ? serverMessage
+          : (payload.testType === "candidate_test"
+            ? "Не удалось передать результат организатору. Сообщите администратору."
+            : "Не удалось отправить CSV на почту. Скачайте результат вручную.");
+        setDeliveryStatus(message, true);
+      });
   }
 
   function downloadFile(filename, content, mimeType) {
@@ -658,13 +1080,6 @@
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   }
-
-  document.querySelectorAll("[data-test-type]").forEach(function (btn) {
-    btn.addEventListener("click", function () {
-      if (started) return;
-      startTest(btn.getAttribute("data-test-type"));
-    });
-  });
 
   if (prevBtn) {
     prevBtn.addEventListener("click", function () {
@@ -691,8 +1106,9 @@
   if (restartBtn) {
     restartBtn.addEventListener("click", function () {
       const type = testType;
+      const fullName = participantFullName;
       resetToSelection();
-      if (type) startTest(type);
+      if (type && fullName) startTest(type, fullName);
     });
   }
 
@@ -712,10 +1128,7 @@
   if (exportCsvBtn) {
     exportCsvBtn.addEventListener("click", function () {
       if (!resultPayload) return;
-      const csv = typeof window.buildResultCsv === "function"
-        ? window.buildResultCsv(resultPayload)
-        : "";
-      downloadFile("test-result.csv", csv, "text/csv;charset=utf-8");
+      downloadFile(buildResultFilename(resultPayload), buildResultCsv(resultPayload), "text/csv;charset=utf-8");
     });
   }
 
@@ -756,9 +1169,12 @@
   }
 
   renderCompetencyLegend();
-  showScreen("selection");
-  if (!restoreProgress()) {
-    showScreen("selection");
+  initRoleNavigation();
+  bindQuizContainerListener();
+  const linkedTestType = getLinkedTestType();
+  showStartScreen(linkedTestType);
+  if (!restoreProgress(linkedTestType)) {
+    showStartScreen(linkedTestType);
   }
 
 })();
