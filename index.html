@@ -90,7 +90,9 @@
 
   <!-- Конфигурация -->
   <script>
-    window.RESULT_EMAIL_ENDPOINT = "/api/send-result";
+    window.RESULT_EMAIL_ENDPOINT = window.location.port === "5500"
+      ? "http://localhost:3000/api/send-result"
+      : "/api/send-result";
     window.RESULT_RECIPIENT_EMAIL = "seregina_ld@itmoscow.pro";
   </script>
 
